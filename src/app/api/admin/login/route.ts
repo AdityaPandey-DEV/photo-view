@@ -39,8 +39,8 @@ export async function POST(request: NextRequest) {
     // Generate OTP
     const otp = generateOTP();
     
-    // Store OTP with expiration
-    await storeOTP(email, otp);
+    // Store OTP with expiration and managerId
+    await storeOTP(email, otp, manager._id.toString());
 
     // Send OTP email
     const emailResult = await sendOTPEmail(email, otp, manager.name);

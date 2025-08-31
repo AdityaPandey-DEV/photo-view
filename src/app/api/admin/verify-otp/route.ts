@@ -21,17 +21,22 @@ export async function POST(request: NextRequest) {
     }
 
     // Verify OTP
-    const otpValid = await verifyOTP(email, otp);
+    const otpResult = await verifyOTP(email, otp);
     
-    if (!otpValid) {
+    if (!otpResult.success) {
       return NextResponse.json(
-        { error: 'Invalid or expired OTP' },
+        { error: otpResult.message },
         { status: 401 }
       );
     }
 
-    // Find manager
-    const manager = await Manager.findOne({ email });
+    // Find manager using managerId from OTP or email
+    const manager = await Manager.findOne({
+      $or: [
+        { _id: otpResult.managerId },
+        { email: email }
+      ]
+    });
     
     if (!manager || !manager.isActive) {
       return NextResponse.json(
