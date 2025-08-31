@@ -3,7 +3,7 @@ import { cookies } from 'next/headers';
 import jwt from 'jsonwebtoken';
 import connectDB from '@/lib/mongodb';
 import Manager from '@/models/Manager';
-import WithdrawalRequest from '@/models/WithdrawalRequest';
+import Withdrawal from '@/models/Withdrawal';
 import User from '@/models/User';
 
 export async function GET(request: NextRequest) {
@@ -31,14 +31,13 @@ export async function GET(request: NextRequest) {
     }
 
     // Check database collections and counts
-    const withdrawalCount = await WithdrawalRequest.countDocuments();
+    const withdrawalCount = await Withdrawal.countDocuments();
     const userCount = await User.countDocuments();
     const managerCount = await Manager.countDocuments();
 
-    // Get sample withdrawal requests
-    const sampleWithdrawals = await WithdrawalRequest.find()
+    // Get sample withdrawals
+    const sampleWithdrawals = await Withdrawal.find()
       .populate('userId', 'name phone')
-      .populate('assignedManager', 'name email phone')
       .limit(5)
       .sort({ createdAt: -1 });
 
@@ -59,17 +58,18 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       message: 'Database test successful',
       counts: {
-        withdrawalRequests: withdrawalCount,
+        withdrawals: withdrawalCount,
         users: userCount,
         managers: managerCount
       },
       sampleData: {
-        withdrawalRequests: sampleWithdrawals.map(w => ({
+        withdrawals: sampleWithdrawals.map(w => ({
           id: w._id,
           amount: w.amount,
           status: w.status,
           userId: w.userId,
-          assignedManager: w.assignedManager,
+          paymentMethod: w.paymentMethod,
+          paymentDetails: w.paymentDetails,
           submittedAt: w.submittedAt
         })),
         vipUsers: vipUsers.map(u => ({
@@ -88,7 +88,7 @@ export async function GET(request: NextRequest) {
       },
       database: {
         name: 'photography-services',
-        collections: ['withdrawalrequests', 'users', 'managers']
+        collections: ['withdrawals', 'users', 'managers']
       }
     });
 
@@ -152,38 +152,22 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    const activeManagers = await Manager.find({ 
-      isActive: true,
-      permissions: { $in: ['manage_withdrawals'] }
-    }).limit(2);
-
-    if (activeManagers.length === 0) {
-      return NextResponse.json({ 
-        error: 'No active managers found. Please create managers first.' 
-      }, { status: 400 });
-    }
-
-    // Create sample withdrawal requests
+    // Create sample withdrawals
     const sampleWithdrawals = [];
-    const statuses = ['pending', 'approved', 'processing', 'completed', 'rejected'];
-    const paymentMethods = ['UPI', 'BANK_TRANSFER'];
+    const statuses = ['pending', 'approved', 'rejected', 'paid'];
+    const paymentMethods = ['UPI', 'BANK'];
 
     for (let i = 0; i < 5; i++) {
       const user = vipUsers[i % vipUsers.length];
-      const assignedManager = activeManagers[i % activeManagers.length];
       const status = statuses[i % statuses.length];
       const paymentMethod = paymentMethods[i % paymentMethods.length];
       const amount = 1000 + (i * 500); // Different amounts for variety
-      const gst = Math.round(amount * 0.1);
-      const netAmount = amount - gst;
 
-      const withdrawalRequest = new WithdrawalRequest({
+      const withdrawal = new Withdrawal({
         userId: user._id,
+        userName: user.name,
+        userPhone: user.phone,
         amount,
-        gst,
-        netAmount,
-        status,
-        assignedManager: assignedManager._id,
         paymentMethod,
         paymentDetails: paymentMethod === 'UPI' ? {
           upiId: `user${i + 1}@upi`
@@ -193,36 +177,26 @@ export async function POST(request: NextRequest) {
           accountHolderName: user.name,
           bankName: 'State Bank of India'
         },
+        status,
         submittedAt: new Date(Date.now() - (i * 24 * 60 * 60 * 1000)), // Different dates
-        reviewedAt: status !== 'pending' ? new Date() : undefined,
-        processedAt: status === 'completed' ? new Date() : undefined,
-        managerNotes: status !== 'pending' ? `Sample ${status} withdrawal` : undefined,
-        rejectionReason: status === 'rejected' ? 'Sample rejection for testing' : undefined
+        processedAt: status === 'paid' ? new Date() : undefined,
+        managerNotes: status !== 'pending' ? `Sample ${status} withdrawal` : undefined
       });
 
-      await withdrawalRequest.save();
-      sampleWithdrawals.push(withdrawalRequest);
-
-      // Update manager's assigned withdrawals
-      await Manager.updateOne(
-        { _id: assignedManager._id },
-        { 
-          $push: { assignedWithdrawals: withdrawalRequest._id },
-          $inc: { totalWithdrawalsProcessed: 1, totalAmountProcessed: amount },
-          $set: { updatedAt: new Date() }
-        }
-      );
+      await withdrawal.save();
+      sampleWithdrawals.push(withdrawal);
     }
 
     return NextResponse.json({
-      message: 'Sample withdrawal requests created successfully',
+      message: 'Sample withdrawals created successfully',
       created: sampleWithdrawals.length,
-      withdrawalRequests: sampleWithdrawals.map(w => ({
+      withdrawals: sampleWithdrawals.map(w => ({
         id: w._id,
         amount: w.amount,
         status: w.status,
         userId: w.userId,
-        assignedManager: w.assignedManager
+        paymentMethod: w.paymentMethod,
+        paymentDetails: w.paymentDetails
       }))
     });
 

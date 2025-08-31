@@ -46,7 +46,7 @@ interface Manager {
   updatedAt: string;
 }
 
-interface WithdrawalRequest {
+interface Withdrawal {
   _id: string;
   userId: {
     _id: string;
@@ -54,23 +54,19 @@ interface WithdrawalRequest {
     phone: string;
   };
   amount: number;
-  gst: number;
-  netAmount: number;
   status: string;
   paymentMethod: string;
   paymentDetails: any;
   submittedAt: string;
-  assignedManager?: {
-    _id: string;
-    name: string;
-  };
+  processedAt?: string;
+  managerNotes?: string;
 }
 
 export default function ManagersPage() {
   const router = useRouter();
   const [admin, setAdmin] = useState<any>(null);
   const [managers, setManagers] = useState<Manager[]>([]);
-  const [withdrawalRequests, setWithdrawalRequests] = useState<WithdrawalRequest[]>([]);
+  const [withdrawals, setWithdrawals] = useState<Withdrawal[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
@@ -112,7 +108,7 @@ export default function ManagersPage() {
   useEffect(() => {
     checkAuth();
     fetchManagers();
-    fetchWithdrawalRequests();
+    fetchWithdrawals();
   }, []);
 
   const checkAuth = async () => {
@@ -137,7 +133,7 @@ export default function ManagersPage() {
       if (response.ok) {
         const data = await response.json();
         setManagers(data.managers);
-        calculateStats(data.managers, withdrawalRequests);
+        calculateStats(data.managers, withdrawals);
         
         if (data.count === 0) {
           console.log('No managers found. Use setup button to create sample managers.');
@@ -151,7 +147,7 @@ export default function ManagersPage() {
     }
   };
 
-  const fetchWithdrawalRequests = async () => {
+  const fetchWithdrawals = async () => {
     try {
       console.log('🔍 Fetching withdrawal requests...');
       const response = await fetch('/api/admin/withdrawals/list');
@@ -160,10 +156,10 @@ export default function ManagersPage() {
       if (response.ok) {
         const data = await response.json();
         console.log('📊 Withdrawal data received:', data);
-        console.log('📋 Withdrawal requests count:', data.withdrawalRequests?.length || 0);
+        console.log('📋 Withdrawals count:', data.withdrawals?.length || 0);
         
-        setWithdrawalRequests(data.withdrawalRequests || []);
-        calculateStats(managers, data.withdrawalRequests || []);
+        setWithdrawals(data.withdrawals || []);
+        calculateStats(managers, data.withdrawals || []);
       } else {
         const errorData = await response.json();
         console.error('❌ Failed to fetch withdrawal requests:', response.status, errorData);
@@ -173,7 +169,7 @@ export default function ManagersPage() {
     }
   };
 
-  const calculateStats = (managerList: Manager[], requestList: WithdrawalRequest[]) => {
+  const calculateStats = (managerList: Manager[], requestList: Withdrawal[]) => {
     const totalManagers = managerList.length;
     const activeManagers = managerList.filter(m => m.isActive).length;
     const totalWithdrawals = requestList.length;
@@ -323,7 +319,7 @@ export default function ManagersPage() {
 
       if (response.ok) {
         // Refresh withdrawal requests
-        fetchWithdrawalRequests();
+        fetchWithdrawals();
       } else {
         const data = await response.json();
         alert(`Error: ${data.error}`);
@@ -334,7 +330,7 @@ export default function ManagersPage() {
     }
   };
 
-  const filteredWithdrawals = withdrawalRequests.filter(request => {
+      const filteredWithdrawals = withdrawals.filter(request => {
     console.log('🔍 Filtering request:', request);
     const matchesSearch = request.userId?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          request.userId?.phone?.includes(searchTerm);
@@ -381,7 +377,7 @@ export default function ManagersPage() {
             <button 
               onClick={() => {
                 fetchManagers();
-                fetchWithdrawalRequests();
+                fetchWithdrawals();
               }} 
               className="refresh-btn"
               style={{
@@ -515,8 +511,8 @@ export default function ManagersPage() {
                     const response = await fetch('/api/admin/withdrawals/test');
                     if (response.ok) {
                       const data = await response.json();
-                      alert(`Withdrawal Test:\nTotal Withdrawals: ${data.counts.withdrawalRequests}\nUsers: ${data.counts.users}\nManagers: ${data.counts.managers}`);
-                      fetchWithdrawalRequests(); // Refresh the list
+                      alert(`Withdrawal Test:\nTotal Withdrawals: ${data.counts.withdrawals}\nUsers: ${data.counts.users}\nManagers: ${data.counts.managers}`);
+                      fetchWithdrawals(); // Refresh the list
                     } else {
                       const error = await response.json();
                       alert(`Test failed: ${error.details || 'Unknown error'}`);
@@ -588,7 +584,7 @@ export default function ManagersPage() {
                     if (response.ok) {
                       const data = await response.json();
                       alert(`Sample Withdrawals Created:\n${data.message}\nCreated: ${data.created} withdrawal requests`);
-                      fetchWithdrawalRequests(); // Refresh the list
+                      fetchWithdrawals(); // Refresh the list
                     } else {
                       const error = await response.json();
                       alert(error.error || 'Failed to create sample withdrawals');
@@ -850,7 +846,7 @@ export default function ManagersPage() {
               border: '1px solid #0ea5e9'
             }}>
               <strong>🔍 Withdrawal Debug Info:</strong><br/>
-              Total Withdrawal Requests: {withdrawalRequests.length}<br/>
+              Total Withdrawal Requests: {withdrawals.length}<br/>
               Search Term: "{searchTerm}"<br/>
               Filter Status: "{filterStatus}"<br/>
               Filtered Results: {filteredWithdrawals.length}<br/>
@@ -870,15 +866,15 @@ export default function ManagersPage() {
               }}>
                 <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>📋</div>
                 <h3 style={{ margin: '0 0 0.5rem 0', color: '#374151' }}>
-                  {withdrawalRequests.length === 0 ? 'No Withdrawal Requests Found' : 'No Withdrawals Match Your Search'}
+                  {withdrawals.length === 0 ? 'No Withdrawal Requests Found' : 'No Withdrawals Match Your Search'}
                 </h3>
                 <p style={{ margin: '0', color: '#9ca3af' }}>
-                  {withdrawalRequests.length === 0 
+                  {withdrawals.length === 0 
                     ? 'There are no withdrawal requests in the system yet. VIP users need to submit withdrawal requests first.'
                     : 'Try adjusting your search terms or filter criteria.'
                   }
                 </p>
-                {withdrawalRequests.length === 0 && (
+                {withdrawals.length === 0 && (
                   <div style={{ marginTop: '1rem' }}>
                     <button
                       onClick={async () => {
@@ -887,7 +883,7 @@ export default function ManagersPage() {
                           if (response.ok) {
                             const data = await response.json();
                             alert(`Sample Withdrawals Created:\n${data.message}\nCreated: ${data.created} withdrawal requests`);
-                            fetchWithdrawalRequests(); // Refresh the list
+                            fetchWithdrawals(); // Refresh the list
                           } else {
                             const error = await response.json();
                             alert(error.error || 'Failed to create sample withdrawals');
@@ -920,14 +916,14 @@ export default function ManagersPage() {
                     <th>Amount</th>
                     <th>Payment Method</th>
                     <th>Status</th>
-                    <th>Assigned Manager</th>
+                    <th>Payment Details</th>
                     <th>Submitted</th>
                     <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredWithdrawals.map((request) => (
-                    <tr key={request._id}>
+                  {filteredWithdrawals.map((request, index) => (
+                    <tr key={request._id || `withdrawal-${index}`}>
                       <td>
                         <div className="user-info">
                           <div className="user-name">{request.userId.name}</div>
@@ -937,7 +933,6 @@ export default function ManagersPage() {
                       <td>
                         <div className="amount-info">
                           <div className="amount">₹{request.amount}</div>
-                          <div className="net-amount">Net: ₹{request.netAmount}</div>
                         </div>
                       </td>
                       <td>
@@ -951,11 +946,13 @@ export default function ManagersPage() {
                         </span>
                         </td>
                       <td>
-                        {request.assignedManager ? (
-                          <span className="manager-name">{request.assignedManager.name}</span>
-                        ) : (
-                          <span className="no-manager">Unassigned</span>
-                        )}
+                        <span className="payment-details">
+                          {request.paymentMethod === 'UPI' ? (
+                            <span>UPI: {request.paymentDetails?.upiId}</span>
+                          ) : (
+                            <span>Bank: {request.paymentDetails?.bankName} - {request.paymentDetails?.accountHolderName}</span>
+                          )}
+                        </span>
                       </td>
                       <td>{new Date(request.submittedAt).toLocaleDateString()}</td>
                       <td>
@@ -986,8 +983,8 @@ export default function ManagersPage() {
                           {request.status === 'approved' && (
                             <button 
                               className="action-btn process" 
-                              title="Process Payment"
-                              onClick={() => handleWithdrawalAction(request._id, 'process')}
+                              title="Mark as Paid"
+                              onClick={() => handleWithdrawalAction(request._id, 'mark-paid')}
                             >
                               <Clock className="icon" />
                             </button>
