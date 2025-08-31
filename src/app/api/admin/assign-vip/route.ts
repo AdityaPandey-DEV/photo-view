@@ -112,7 +112,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { action, userId, managerId } = await request.json();
+    const requestBody = await request.json();
+    const { action, userId, managerId } = requestBody;
 
     // Validate action
     if (!action || !['auto-assign', 'manual-assign', 'redistribute'].includes(action)) {
