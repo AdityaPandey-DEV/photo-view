@@ -21,6 +21,32 @@ export interface User {
   save(): Promise<User>;
 }
 
+export interface WithdrawalRequest {
+  _id: Types.ObjectId;
+  userId: Types.ObjectId;
+  amount: number;
+  gst: number;
+  netAmount: number;
+  status: 'pending' | 'under_review' | 'approved' | 'processing' | 'completed' | 'rejected' | 'cancelled';
+  assignedManager?: Types.ObjectId;
+  paymentMethod: 'UPI' | 'BANK_TRANSFER';
+  paymentDetails: {
+    upiId?: string;
+    bankAccount?: string;
+    ifscCode?: string;
+    accountHolderName?: string;
+    bankName?: string;
+  };
+  submittedAt: Date;
+  reviewedAt?: Date;
+  processedAt?: Date;
+  managerNotes?: string;
+  rejectionReason?: string;
+  createdAt: Date;
+  updatedAt: Date;
+  save(): Promise<WithdrawalRequest>;
+}
+
 export interface Admin {
   _id: Types.ObjectId;
   username: string;
