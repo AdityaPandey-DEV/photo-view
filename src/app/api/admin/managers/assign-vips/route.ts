@@ -24,7 +24,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Manager access denied' }, { status: 403 });
     }
 
-    const { managerId: targetManagerId, userId } = await request.json();
+    const requestBody = await request.json();
+    const targetManagerId = requestBody.managerId;
+    const userId = requestBody.userId;
 
     if (!targetManagerId || !userId) {
       return NextResponse.json({ error: 'Manager ID and User ID are required' }, { status: 400 });
