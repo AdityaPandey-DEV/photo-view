@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import jwt from 'jsonwebtoken';
 import connectDB from '@/lib/mongodb';
-import Admin from '@/models/Admin';
 import Manager from '@/models/Manager';
 import User from '@/models/User';
 
@@ -17,24 +16,24 @@ export async function POST(request: NextRequest) {
     }
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET!) as any;
-    const managerId = decoded.managerId;
+    const authenticatedManagerId = decoded.managerId;
     
-    // Check if admin exists
-    const manager = await Manager.findById(managerId);
-    if (!admin) {
+    // Check if authenticated manager exists
+    const authenticatedManager = await Manager.findById(authenticatedManagerId);
+    if (!authenticatedManager) {
       return NextResponse.json({ error: 'Manager access denied' }, { status: 403 });
     }
 
-    const { managerId, userId } = await request.json();
+    const { managerId: targetManagerId, userId } = await request.json();
 
-    if (!managerId || !userId) {
+    if (!targetManagerId || !userId) {
       return NextResponse.json({ error: 'Manager ID and User ID are required' }, { status: 400 });
     }
 
-    // Check if manager exists
-    const manager = await Manager.findById(managerId);
-    if (!manager) {
-      return NextResponse.json({ error: 'Manager not found' }, { status: 404 });
+    // Check if target manager exists
+    const targetManager = await Manager.findById(targetManagerId);
+    if (!targetManager) {
+      return NextResponse.json({ error: 'Target manager not found' }, { status: 404 });
     }
 
     // Check if user exists and has VIP
@@ -47,24 +46,25 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'User does not have VIP status' }, { status: 400 });
     }
 
-    // Check if manager has capacity
-    if (manager.currentVipCount >= manager.maxVipCapacity) {
-      return NextResponse.json({ error: 'Manager has reached maximum VIP capacity' }, { status: 400 });
+    // Check if target manager has capacity
+    if (targetManager.currentVipCount >= targetManager.maxVipCapacity) {
+      return NextResponse.json({ error: 'Target manager has reached maximum VIP capacity' }, { status: 400 });
     }
 
     // Check if user is already assigned to another manager
-    if (user.assignedManager && user.assignedManager.toString() !== managerId) {
+    if (user.assignedManager && user.assignedManager.toString() !== targetManagerId) {
       return NextResponse.json({ error: 'User is already assigned to another manager' }, { status: 400 });
     }
 
-    // Assign user to manager
-    user.assignedManager = managerId;
+    // Assign user to target manager
+    user.assignedManager = targetManagerId;
     await user.save();
 
-    // Update manager's assigned VIPs
-    if (!manager.assignedVips.includes(userId)) {
-      manager.assignedVips.push(userId);
-      await manager.save();
+    // Update target manager's assigned VIPs
+    if (!targetManager.assignedVips.includes(userId)) {
+      targetManager.assignedVips.push(userId);
+      targetManager.currentVipCount = targetManager.assignedVips.length;
+      await targetManager.save();
     }
 
     return NextResponse.json({
@@ -76,9 +76,9 @@ export async function POST(request: NextRequest) {
         monthlyReturns: user.monthlyReturns
       },
       manager: {
-        id: manager._id,
-        name: manager.name,
-        currentVipCount: manager.assignedVips.length
+        id: targetManager._id,
+        name: targetManager.name,
+        currentVipCount: targetManager.assignedVips.length
       }
     });
 
