@@ -174,17 +174,6 @@ export default function WalletPage() {
         </div>
 
         <div className="wallet-overview">
-          {/* Debug Info - Remove this after fixing */}
-          {process.env.NODE_ENV === 'development' && (
-            <div className="debug-info" style={{ background: '#f0f0f0', padding: '10px', margin: '10px 0', borderRadius: '5px', fontSize: '12px' }}>
-              <strong>Debug Info:</strong><br/>
-              VIP Level: {user?.vipLevel || 'undefined'}<br/>
-              Monthly Returns: {user?.monthlyReturns || 'undefined'}<br/>
-              Total Earnings: {user?.totalEarnings || 'undefined'}<br/>
-              Subscription Date: {user?.subscriptionDate || 'undefined'}<br/>
-              Raw User: {JSON.stringify(user, null, 2)}
-            </div>
-          )}
           
           <div className="balance-card">
             <div className="balance-icon">
