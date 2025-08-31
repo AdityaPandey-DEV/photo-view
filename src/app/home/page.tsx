@@ -33,7 +33,7 @@ export default function HomePage() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [showAnalytics, setShowAnalytics] = useState(false);
+
   const [error, setError] = useState<string | null>(null);
   
   // Photo tasks data - will be updated based on VIP level
@@ -681,10 +681,7 @@ export default function HomePage() {
               <DollarSign className="icon" />
               <span>💰 My Wallet</span>
             </button>
-            <button className="action-btn" onClick={() => setShowAnalytics(true)}>
-              <BarChart3 className="icon" />
-              <span>📊 View Analytics</span>
-            </button>
+
             <button className="action-btn" onClick={() => router.push('/settings')}>
               <Settings className="icon" />
               <span>⚙️ Settings</span>
@@ -697,50 +694,7 @@ export default function HomePage() {
         </section>
       </main>
 
-      {/* Analytics Modal */}
-      {showAnalytics && (
-        <div className="modal-overlay" onClick={() => setShowAnalytics(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3>Analytics Dashboard</h3>
-              <button onClick={() => setShowAnalytics(false)} className="modal-close">×</button>
-            </div>
-            <div className="modal-content">
-              <div className="analytics-grid">
-                <div className="analytics-item">
-                  <h4>Total Tasks</h4>
-                  <p>{photoTasks.length}</p>
-                </div>
-                <div className="analytics-item">
-                  <h4>Completed Tasks</h4>
-                  <p>{photoTasks.filter(task => task.completed).length}</p>
-                </div>
-                <div className="analytics-item">
-                  <h4>Completion Rate</h4>
-                  <p>{Math.round(completionPercentage)}%</p>
-                </div>
-                <div className="analytics-item">
-                  <h4>Total Balance</h4>
-                  <p>₹{Math.max(0, realTimeBalance?.current || 0)}</p>
-                </div>
-                <div className="analytics-item">
-                  <h4>VIP Level</h4>
-                  <p>{user.vipLevel || 'Basic'}</p>
-                </div>
-                <div className="analytics-item">
-                  <h4>Monthly Returns</h4>
-                  <p>₹{user.monthlyReturns || 0}</p>
-                </div>
-              </div>
-            </div>
-            <div className="modal-footer">
-              <button onClick={() => setShowAnalytics(false)} className="modal-btn primary">
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+
       
       {/* Profile Image Selector */}
       <ProfileImageSelector
