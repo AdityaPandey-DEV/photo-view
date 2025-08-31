@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
     const userId = decoded.userId;
 
     // Find user for VIP level and basic info
-    const user = await User.findById(userId).select('vipLevel subscriptionDate monthlyReturns vipStatus vipExpiryDate');
+    const user = await User.findById(userId).select('vipLevel subscriptionDate monthlyReturns vipStatus vipExpiryDate walletBalance');
     if (!user) {
       return NextResponse.json(
         { error: 'User not found' },
@@ -83,6 +83,16 @@ export async function GET(request: NextRequest) {
 
     // Calculate current balance (never below 0)
     let currentBalance = totalEarned - totalSpent;
+    
+    // Also check User.walletBalance field for consistency
+    if (user.walletBalance !== undefined) {
+      // Use the higher of the two balances to ensure consistency
+      const calculatedBalance = Math.max(currentBalance, user.walletBalance);
+      if (calculatedBalance !== currentBalance) {
+        console.log(`User ${userId} walletBalance (${user.walletBalance}) differs from calculated (${currentBalance}), using higher value`);
+        currentBalance = calculatedBalance;
+      }
+    }
     
     // Ensure balance never goes below 0
     if (currentBalance < 0) {

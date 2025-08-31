@@ -42,10 +42,32 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Get real-time balance from transactions (NO MEMORY STORAGE)
+    const allTransactions = await WalletTransaction.find({ userId }).sort({ createdAt: -1 });
+    
+    const totalEarned = allTransactions
+      .filter(t => t.amount > 0)
+      .reduce((sum, t) => sum + t.amount, 0);
+    
+    const totalSpent = Math.abs(allTransactions
+      .filter(t => t.amount < 0)
+      .reduce((sum, t) => sum + t.amount, 0));
+    
+    const currentBalance = Math.max(0, totalEarned - totalSpent);
+
+    // Debug logging
+    console.log(`Withdrawal request for user ${userId}:`);
+    console.log(`- Requested amount: ₹${amount}`);
+    console.log(`- Total earned: ₹${totalEarned}`);
+    console.log(`- Total spent: ₹${totalSpent}`);
+    console.log(`- Current balance: ₹${currentBalance}`);
+    console.log(`- Transactions found: ${allTransactions.length}`);
+
     // Check balance
-    if (amount > user.totalEarnings) {
+    if (amount > currentBalance) {
+      console.log(`❌ Insufficient balance: requested ₹${amount}, available ₹${currentBalance}`);
       return NextResponse.json(
-        { error: 'Insufficient balance' },
+        { error: `Insufficient balance. Available: ₹${currentBalance}` },
         { status: 400 }
       );
     }
@@ -55,9 +77,6 @@ export async function POST(request: NextRequest) {
     const netAmount = amount - gst;
 
     // DO NOT update user.totalEarnings in memory - calculate from transactions
-    // user.totalEarnings -= amount;  // ❌ REMOVED - Dangerous memory storage
-    // await user.save();             // ❌ REMOVED - No need to save user
-    
     // Balance is calculated real-time from transactions in the balance API
     
     // Record withdrawal transaction
@@ -66,27 +85,53 @@ export async function POST(request: NextRequest) {
       type: 'withdrawal',
       amount: -amount, // Negative amount for withdrawal
       description: `Withdrawal: ₹${amount} (GST: ₹${gst}, Net: ₹${netAmount})`,
-      balanceAfter: user.totalEarnings,
+      balanceAfter: currentBalance - amount, // Calculate balance after withdrawal
       reference: `withdrawal_${Date.now()}`
     });
+    
+    console.log(`Creating withdrawal transaction:`);
+    console.log(`- User ID: ${user._id}`);
+    console.log(`- Amount: -₹${amount}`);
+    console.log(`- Balance after: ₹${currentBalance - amount}`);
+    console.log(`- Reference: ${transaction.reference}`);
+    
     await transaction.save();
+    console.log(`✅ Withdrawal transaction saved successfully with ID: ${transaction._id}`);
 
     return NextResponse.json({
-      message: 'Withdrawal request submitted successfully',
+      message: 'Withdrawal processed successfully',
       withdrawal: {
         amount: amount,
         gst: gst,
         netAmount: netAmount,
         timestamp: new Date(),
-        status: 'pending'
+        status: 'completed',
+        balanceBefore: currentBalance,
+        balanceAfter: currentBalance - amount
       },
-      note: 'Balance updated in database. Use /api/wallet/balance for real-time balance.'
+      note: 'Withdrawal completed. Balance updated in database. Use /api/wallet/balance for real-time balance.'
     });
 
   } catch (error: any) {
     console.error('Withdrawal error:', error);
+    
+    // Provide more specific error messages
+    if (error.name === 'ValidationError') {
+      return NextResponse.json(
+        { error: 'Invalid withdrawal data. Please check your request.' },
+        { status: 400 }
+      );
+    }
+    
+    if (error.message && error.message.includes('Insufficient balance')) {
+      return NextResponse.json(
+        { error: error.message },
+        { status: 400 }
+      );
+    }
+    
     return NextResponse.json(
-      { error: 'Failed to process withdrawal' },
+      { error: 'Failed to process withdrawal. Please try again.' },
       { status: 500 }
     );
   }

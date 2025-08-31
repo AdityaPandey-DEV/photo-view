@@ -172,6 +172,52 @@ export default function VIPManagementPage() {
     }
   };
 
+  const handleViewStats = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch('/api/admin/assign-vip');
+      
+      if (response.ok) {
+        const data = await response.json();
+        const stats = data.stats;
+        
+        // Show stats in a formatted alert (you can replace this with a modal)
+        const statsMessage = `
+VIP Assignment Statistics:
+
+📊 Managers:
+- Total: ${stats.managers.total}
+- Average Capacity Utilization: ${(stats.managers.averageCapacityUtilization * 100).toFixed(1)}%
+
+👥 VIPs:
+- Total: ${stats.vips.total}
+- Assigned: ${stats.vips.assigned}
+- Unassigned: ${stats.vips.unassigned}
+- Assignment Rate: ${stats.efficiency.assignmentRate.toFixed(1)}%
+
+⚡ Efficiency:
+- Average VIPs per Manager: ${stats.efficiency.averageVIPsPerManager.toFixed(1)}
+- Total Capacity: ${stats.efficiency.totalCapacity}
+- Used Capacity: ${stats.efficiency.usedCapacity}
+
+💡 Recommendations:
+- Needs Redistribution: ${stats.recommendations.needsRedistribution ? 'Yes' : 'No'}
+- Load Balancing Issues: ${stats.recommendations.loadBalancing ? 'Yes' : 'No'}
+- Capacity Issues: ${stats.recommendations.capacityIssues ? 'Yes' : 'No'}
+        `;
+        
+        alert(statsMessage);
+      } else {
+        const errorData = await response.json();
+        setError(errorData.error || 'Failed to fetch VIP statistics');
+      }
+    } catch (error) {
+      setError('Network error. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedVIP) return;
@@ -408,6 +454,28 @@ export default function VIPManagementPage() {
               >
                 <Users className="icon" />
                 Manage Managers
+              </button>
+
+              <button
+                onClick={handleViewStats}
+                className="control-btn view-stats-btn"
+                style={{
+                  background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
+                  color: 'white',
+                  border: 'none',
+                  padding: '0.75rem 1.5rem',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                  fontWeight: '600',
+                  boxShadow: '0 4px 15px rgba(59, 130, 246, 0.3)',
+                  transition: 'all 0.3s ease'
+                }}
+              >
+                <BarChart3 className="icon" />
+                View Assignment Stats
               </button>
             </div>
           </div>

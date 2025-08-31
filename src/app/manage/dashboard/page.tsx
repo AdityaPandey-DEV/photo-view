@@ -15,7 +15,8 @@ import {
   Filter,
   Eye,
   Edit,
-  Trash2
+  Trash2,
+  TrendingUp
 } from 'lucide-react';
 
 interface Admin {
@@ -32,6 +33,8 @@ interface User {
   phone: string;
   vipLevel?: string;
   totalEarnings?: number;
+  totalEarned?: number;
+  totalWithdrawn?: number;
   monthlyReturns?: number;
   subscriptionDate?: string;
   createdAt: string;
@@ -48,6 +51,8 @@ export default function ManageDashboard() {
     totalUsers: 0,
     vipUsers: 0,
     totalEarnings: 0,
+    totalEarned: 0,
+    totalWithdrawn: 0,
     activeVips: { VIP1: 0, VIP2: 0, VIP3: 0 }
   });
 
@@ -61,11 +66,14 @@ export default function ManageDashboard() {
       const response = await fetch('/api/admin/auth');
       if (response.ok) {
         const data = await response.json();
+        console.log('Auth API response:', data);
         setAdmin(data.admin);
       } else {
+        console.log('Auth failed:', response.status);
         router.push('/manage');
       }
     } catch (error) {
+      console.error('Auth error:', error);
       router.push('/manage');
     } finally {
       setLoading(false);
@@ -85,17 +93,28 @@ export default function ManageDashboard() {
     }
   };
 
+  // Refresh data every 30 seconds for real-time updates
+  useEffect(() => {
+    const interval = setInterval(() => {
+      fetchUsers();
+    }, 30000);
+
+    return () => clearInterval(interval);
+  }, []);
+
   const calculateStats = (userList: User[]) => {
     const totalUsers = userList.length;
     const vipUsers = userList.filter(u => u.vipLevel).length;
     const totalEarnings = userList.reduce((sum, u) => sum + (u.totalEarnings || 0), 0);
+    const totalEarned = userList.reduce((sum, u) => sum + (u.totalEarned || 0), 0);
+    const totalWithdrawn = userList.reduce((sum, u) => sum + (u.totalWithdrawn || 0), 0);
     const activeVips = {
       VIP1: userList.filter(u => u.vipLevel === 'VIP1').length,
       VIP2: userList.filter(u => u.vipLevel === 'VIP2').length,
       VIP3: userList.filter(u => u.vipLevel === 'VIP3').length
     };
 
-    setStats({ totalUsers, vipUsers, totalEarnings, activeVips });
+    setStats({ totalUsers, vipUsers, totalEarnings, totalEarned, totalWithdrawn, activeVips });
   };
 
   const handleLogout = async () => {
@@ -185,6 +204,22 @@ export default function ManageDashboard() {
             <div className="stat-card">
               <BarChart3 className="stat-icon" />
               <div className="stat-content">
+                <h3>Total Earned</h3>
+                <p className="stat-value">₹{stats.totalEarned.toLocaleString()}</p>
+              </div>
+            </div>
+
+            <div className="stat-card">
+              <TrendingUp className="stat-icon" />
+              <div className="stat-content">
+                <h3>Total Withdrawn</h3>
+                <p className="stat-value">₹{stats.totalWithdrawn.toLocaleString()}</p>
+              </div>
+            </div>
+
+            <div className="stat-card">
+              <BarChart3 className="stat-icon" />
+              <div className="stat-content">
                 <h3>Active VIPs</h3>
                 <div className="vip-breakdown">
                   <span>VIP1: {stats.activeVips.VIP1}</span>
@@ -222,53 +257,43 @@ export default function ManageDashboard() {
                             <option value="VIP3">VIP3</option>
                             <option value="">No VIP</option>
                           </select>
-                          {admin?.permissions.includes('manage_admins') && (
-                            <button
-                              onClick={() => router.push('/manage/admins')}
-                              className="manage-admins-btn"
-                              style={{
-                                background: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)',
-                                color: 'white',
-                                border: 'none',
-                                padding: '0.75rem 1.5rem',
-                                borderRadius: '8px',
-                                cursor: 'pointer',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '0.5rem',
-                                fontWeight: '600',
-                                boxShadow: '0 4px 15px rgba(139, 92, 246, 0.3)',
-                                transition: 'all 0.3s ease'
-                              }}
-                            >
-                              <Shield className="icon" />
-                              Manage Admins
-                            </button>
-                          )}
-                          
-                          {admin?.permissions.includes('manage_vips') && (
-                            <button
-                              onClick={() => router.push('/manage/vips')}
-                              className="manage-vips-btn"
-                              style={{
-                                background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
-                                color: 'white',
-                                border: 'none',
-                                padding: '0.75rem 1.5rem',
-                                borderRadius: '8px',
-                                cursor: 'pointer',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '0.5rem',
-                                fontWeight: '600',
-                                boxShadow: '0 4px 15px rgba(245, 158, 11, 0.3)',
-                                transition: 'all 0.3s ease'
-                              }}
-                            >
-                              <Crown className="icon" />
-                              Manage VIPs
-                            </button>
-                          )}
+                          <div className="admin-action-buttons">
+                            {!loading && admin && admin.permissions && admin.permissions.includes('manage_admins') && (
+                              <button
+                                onClick={() => router.push('/manage/admins')}
+                                className="manage-btn manage-admins-btn"
+                              >
+                                <Shield className="icon" />
+                                <span>Admins</span>
+                              </button>
+                            )}
+                            
+                            {!loading && admin && admin.permissions && admin.permissions.includes('manage_vips') && (
+                              <button
+                                onClick={() => router.push('/manage/vips')}
+                                className="manage-btn manage-vips-btn"
+                              >
+                                <Crown className="icon" />
+                                <span>VIPs</span>
+                              </button>
+                            )}
+                            
+                            {!loading && admin && admin.permissions && admin.permissions.includes('manage_managers') && (
+                              <button
+                                onClick={() => router.push('/manage/managers')}
+                                className="manage-btn manage-managers-btn"
+                              >
+                                <Users className="icon" />
+                                <span>Managers</span>
+                              </button>
+                              )}
+                            
+                            {!loading && (!admin || !admin.permissions) && (
+                              <div className="permissions-loading">
+                                Loading permissions...
+                              </div>
+                            )}
+                          </div>
                         </div>
                       </div>
 

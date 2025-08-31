@@ -6,8 +6,8 @@ export async function POST() {
       message: 'Logout successful'
     });
 
-    // Clear admin token cookie
-    response.cookies.set('admin-token', '', {
+    // Clear manager token cookie
+    response.cookies.set('manager-token', '', {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict',

@@ -9,6 +9,10 @@ export interface Manager {
   maxVipCapacity: number;
   currentVipCount: number;
   assignedVips: Types.ObjectId[];
+  role: 'manager' | 'senior_manager' | 'admin';
+  permissions: string[];
+  createdAt: Date;
+  updatedAt: Date;
   save(): Promise<Manager>;
 }
 

@@ -13,7 +13,7 @@ export async function POST(request: NextRequest) {
 
     // Get admin token from cookie
     const cookieStore = await cookies();
-    const token = cookieStore.get('admin-token')?.value;
+    const token = cookieStore.get('manager-token')?.value;
 
     if (!token) {
       return NextResponse.json(
@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
     // Verify admin token
     const decoded = jwt.verify(token, JWT_SECRET) as JwtPayload;
     
-    if (!decoded || !decoded.adminId) {
+    if (!decoded || !decoded.managerId) {
       return NextResponse.json(
         { error: 'Invalid token' },
         { status: 401 }
@@ -33,7 +33,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Verify admin exists and is active
-    const currentAdmin = await Admin.findById(decoded.adminId);
+    const currentAdmin = await Manager.findById(decoded.managerId);
     if (!currentAdmin || !currentAdmin.isActive) {
       return NextResponse.json(
         { error: 'Admin access denied' },

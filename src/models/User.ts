@@ -21,6 +21,14 @@ export interface IUser extends mongoose.Document {
     amount: number;
     transactionId: string;
   }>;
+  // Wallet functionality
+  walletBalance: number;
+  walletTransactions: Array<{
+    type: string;
+    amount: number;
+    description: string;
+    timestamp: Date;
+  }>;
   createdAt: Date;
   updatedAt: Date;
   comparePassword(candidatePassword: string): Promise<boolean>;
@@ -100,6 +108,29 @@ const userSchema = new mongoose.Schema<IUser>({
     transactionId: {
       type: String,
       required: true
+    }
+  }],
+  // Wallet functionality
+  walletBalance: {
+    type: Number,
+    default: 0
+  },
+  walletTransactions: [{
+    type: {
+      type: String,
+      required: true
+    },
+    amount: {
+      type: Number,
+      required: true
+    },
+    description: {
+      type: String,
+      required: true
+    },
+    timestamp: {
+      type: Date,
+      default: Date.now
     }
   }]
 }, {

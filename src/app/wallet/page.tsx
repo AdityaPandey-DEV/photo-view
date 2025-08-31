@@ -3,10 +3,13 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Wallet, ArrowLeft, TrendingUp, DollarSign, AlertCircle, CheckCircle } from 'lucide-react';
+import SimpleWithdrawalForm from '@/components/SimpleWithdrawalForm';
+import UserWithdrawals from '@/components/UserWithdrawals';
 
 export default function WalletPage() {
   const router = useRouter();
   const [user, setUser] = useState<any>(null);
+  const [realTimeBalance, setRealTimeBalance] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [withdrawing, setWithdrawing] = useState(false);
   const [withdrawAmount, setWithdrawAmount] = useState('');
@@ -14,9 +17,12 @@ export default function WalletPage() {
   const [error, setError] = useState('');
   const [transactions, setTransactions] = useState<any[]>([]);
   const [showTransactions, setShowTransactions] = useState(false);
+  const [showEnhancedWithdrawal, setShowEnhancedWithdrawal] = useState(false);
+  const [showWithdrawalRequests, setShowWithdrawalRequests] = useState(false);
 
   useEffect(() => {
     fetchUserData();
+    fetchRealTimeBalance();
     fetchTransactions();
   }, []);
 
@@ -25,14 +31,18 @@ export default function WalletPage() {
     console.log('Wallet: User state changed to:', user);
   }, [user]);
 
+  // Debug: Log balance state changes
+  useEffect(() => {
+    console.log('Wallet: Real-time balance changed to:', realTimeBalance);
+  }, [realTimeBalance]);
+
   const fetchUserData = async () => {
     try {
       const response = await fetch('/api/auth/me');
       if (response.ok) {
         const userData = await response.json();
-        console.log('Wallet: Received user data:', userData); // Debug log
-        console.log('Wallet: Setting user to:', userData.user); // Debug log
-        setUser(userData.user); // Fix: Extract user from userData.user
+        console.log('Wallet: Received user data:', userData);
+        setUser(userData.user);
       } else {
         console.log('Wallet: API response not ok:', response.status);
         router.push('/login');
@@ -42,6 +52,26 @@ export default function WalletPage() {
       router.push('/login');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchRealTimeBalance = async () => {
+    try {
+      const response = await fetch('/api/wallet/balance', {
+        headers: {
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache'
+        }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        console.log('Wallet: Received real-time balance:', data);
+        setRealTimeBalance(data);
+      } else {
+        console.error('Failed to fetch real-time balance:', response.status);
+      }
+    } catch (error) {
+      console.error('Error fetching real-time balance:', error);
     }
   };
 
@@ -70,8 +100,10 @@ export default function WalletPage() {
         throw new Error('Minimum withdrawal amount is ₹350');
       }
 
-      if (amount > user.totalEarnings) {
-        throw new Error('Insufficient balance');
+      // Use real-time balance instead of user.totalEarnings
+      const currentBalance = realTimeBalance?.balance?.current || 0;
+      if (amount > currentBalance) {
+        throw new Error(`Insufficient balance. Available: ₹${currentBalance}`);
       }
 
       const response = await fetch('/api/wallet/withdraw', {
@@ -89,8 +121,9 @@ export default function WalletPage() {
       setMessage('Withdrawal request submitted successfully!');
       setWithdrawAmount('');
       
-      // Refresh user data
+      // Refresh both user data and real-time balance
       fetchUserData();
+      fetchRealTimeBalance();
     } catch (err: any) {
       setError(err.message || 'Withdrawal failed');
     } finally {
@@ -108,7 +141,17 @@ export default function WalletPage() {
     return (
       <div className="wallet-page">
         <div className="wallet-container">
-          <div className="loading">Loading...</div>
+          <div className="loading" style={{
+            textAlign: 'center',
+            padding: '4rem',
+            fontSize: '1.5rem',
+            color: '#6b7280'
+          }}>
+            <div style={{ marginBottom: '1rem' }}>🔄 Loading Wallet...</div>
+            <div style={{ fontSize: '1rem', color: '#9ca3af' }}>
+              Fetching your account data and real-time balance...
+            </div>
+          </div>
         </div>
       </div>
     );
@@ -166,14 +209,51 @@ export default function WalletPage() {
               padding: '8px 16px', 
               borderRadius: '5px', 
               cursor: 'pointer',
-              marginLeft: 'auto'
+              marginLeft: '10px'
             }}
           >
-            🔄 Refresh
+            🔄 Refresh User
+          </button>
+          <button 
+            onClick={() => {
+              console.log('Wallet: Force refreshing balance...');
+              fetchRealTimeBalance();
+            }} 
+            className="refresh-btn"
+            style={{ 
+              background: '#10b981', 
+              color: 'white', 
+              border: 'none', 
+              padding: '8px 16px', 
+              borderRadius: '5px', 
+              cursor: 'pointer',
+              marginLeft: '10px'
+            }}
+          >
+            💰 Refresh Balance
           </button>
         </div>
 
         <div className="wallet-overview">
+          
+          {/* Debug Info - Remove after testing */}
+          {process.env.NODE_ENV === 'development' && (
+            <div className="debug-info" style={{ 
+              background: '#f0f9ff', 
+              padding: '1rem', 
+              margin: '1rem 0', 
+              borderRadius: '8px', 
+              fontSize: '0.875rem',
+              border: '1px solid #0ea5e9'
+            }}>
+              <strong>🔍 Debug Info:</strong><br/>
+              User: {user ? '✅ Loaded' : '❌ Not loaded'}<br/>
+              Real-time Balance: {realTimeBalance ? '✅ Loaded' : '❌ Not loaded'}<br/>
+              Balance Data: {realTimeBalance ? JSON.stringify(realTimeBalance.balance, null, 2) : 'No data'}<br/>
+              User VIP Level: {user?.vipLevel || 'No VIP'}<br/>
+              Loading State: {loading ? 'Yes' : 'No'}
+            </div>
+          )}
           
           <div className="balance-card">
             <div className="balance-icon">
@@ -181,8 +261,20 @@ export default function WalletPage() {
             </div>
             <div className="balance-info">
               <h2>Total Balance</h2>
-              <div className="balance-amount">₹{user?.totalEarnings || 0}</div>
+              <div className="balance-amount">
+                {realTimeBalance ? (
+                  `₹${realTimeBalance.balance?.current || 0}`
+                ) : (
+                  loading ? 'Loading...' : '₹0'
+                )}
+              </div>
               <p>Available for withdrawal</p>
+              {realTimeBalance && (
+                <div className="balance-details">
+                  <small>Total Earned: ₹{realTimeBalance.balance?.totalEarned || 0}</small>
+                  <small>Total Spent: ₹{realTimeBalance.balance?.totalSpent || 0}</small>
+                </div>
+              )}
             </div>
           </div>
 
@@ -222,53 +314,105 @@ export default function WalletPage() {
                 <li>Minimum withdrawal: <strong>₹350</strong></li>
                 <li>GST deduction: <strong>10%</strong></li>
                 <li>Processing time: <strong>24-48 hours</strong></li>
+                <li><strong>NEW:</strong> Enhanced withdrawal with manager approval</li>
               </ul>
             </div>
           </div>
 
-          <form className="withdrawal-form" onSubmit={handleWithdraw}>
-            {message && (
-              <div className="success-message">
-                <CheckCircle className="icon" />
-                {message}
-              </div>
-            )}
-
-            {error && (
-              <div className="error-message">
-                <AlertCircle className="icon" />
-                {error}
-              </div>
-            )}
-
-            <div className="form-field">
-              <label htmlFor="withdrawAmount" className="form-label">
-                Withdrawal Amount (₹)
-              </label>
-              <input
-                id="withdrawAmount"
-                type="number"
-                min="350"
-                max={user?.totalEarnings || 0}
-                step="1"
-                value={withdrawAmount}
-                onChange={(e) => setWithdrawAmount(e.target.value)}
-                className="form-input"
-                placeholder="Enter amount (min ₹350)"
-                required
-              />
+          <div className="withdrawal-options">
+            <button 
+              onClick={() => setShowEnhancedWithdrawal(true)}
+              className="enhanced-withdrawal-btn"
+              style={{
+                background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
+                color: 'white',
+                border: 'none',
+                padding: '1rem 2rem',
+                borderRadius: '12px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                fontWeight: '600',
+                fontSize: '1rem',
+                boxShadow: '0 4px 15px rgba(59, 130, 246, 0.3)',
+                transition: 'all 0.3s ease'
+              }}
+            >
+              <CheckCircle className="icon" />
+              Submit New Withdrawal Request
+            </button>
+            
+            <button 
+              onClick={() => setShowWithdrawalRequests(true)}
+              className="view-requests-btn"
+              style={{
+                background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                color: 'white',
+                border: 'none',
+                padding: '1rem 2rem',
+                borderRadius: '12px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                fontWeight: '600',
+                fontSize: '1rem',
+                boxShadow: '0 4px 15px rgba(16, 185, 129, 0.3)',
+                transition: 'all 0.3s ease'
+              }}
+            >
+              <Wallet className="icon" />
+              View My Withdrawal Requests
+            </button>
+            
+            <div className="divider">
+              <span>OR</span>
             </div>
 
-            {withdrawalDetails && (
-              <div className="withdrawal-breakdown">
-                <h4>Withdrawal Breakdown</h4>
-                <div className="breakdown-item">
-                  <span>Requested Amount:</span>
-                  <span>₹{withdrawAmount}</span>
+            <form className="withdrawal-form" onSubmit={handleWithdraw}>
+              {message && (
+                <div className="success-message">
+                  <CheckCircle className="icon" />
+                  {message}
                 </div>
-                <div className="breakdown-item">
-                  <span>GST (10%):</span>
-                  <span>-₹{withdrawalDetails.gst.toFixed(2)}</span>
+              )}
+
+              {error && (
+                <div className="error-message">
+                  <AlertCircle className="icon" />
+                  {error}
+                </div>
+              )}
+
+              <div className="form-field">
+                <label htmlFor="withdrawAmount" className="form-label">
+                  Withdrawal Amount (₹)
+                </label>
+                <input
+                  id="withdrawAmount"
+                  type="number"
+                  min="350"
+                  max={realTimeBalance?.balance?.current || 0}
+                  step="1"
+                  value={withdrawAmount}
+                  onChange={(e) => setWithdrawAmount(e.target.value)}
+                  className="form-input"
+                  placeholder="Enter amount (min ₹350)"
+                  required
+                />
+              </div>
+
+              {withdrawalDetails && (
+                <div className="withdrawal-breakdown">
+                  <h4>Withdrawal Breakdown</h4>
+                  <div className="breakdown-item">
+                    <span>Requested Amount:</span>
+                    <span>₹{withdrawAmount}</span>
+                  </div>
+                  <div className="breakdown-item">
+                    <span>GST (10%):</span>
+                    <span>-₹{withdrawalDetails.gst.toFixed(2)}</span>
                 </div>
                 <div className="breakdown-item total">
                   <span>Net Amount:</span>
@@ -282,10 +426,41 @@ export default function WalletPage() {
               className="withdraw-btn" 
               disabled={withdrawing || !withdrawAmount || parseFloat(withdrawAmount) < 350}
             >
-              {withdrawing ? 'Processing...' : 'Request Withdrawal'}
+              {withdrawing ? 'Processing...' : 'Request Withdrawal (Legacy)'}
             </button>
           </form>
         </div>
+      </div>
+
+      {/* Enhanced Withdrawal Modal */}
+      {showEnhancedWithdrawal && (
+        <div className="modal-overlay" onClick={() => setShowEnhancedWithdrawal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <SimpleWithdrawalForm
+              onClose={() => setShowEnhancedWithdrawal(false)}
+              onSuccess={() => {
+                fetchRealTimeBalance();
+                setShowWithdrawalRequests(false);
+              }}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Withdrawal Requests Modal */}
+      {showWithdrawalRequests && (
+        <div className="modal-overlay" onClick={() => setShowWithdrawalRequests(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>My Withdrawal Requests</h3>
+              <button className="modal-close" onClick={() => setShowWithdrawalRequests(false)}>×</button>
+            </div>
+            <div className="modal-body">
+              <UserWithdrawals />
+            </div>
+          </div>
+        </div>
+      )}
 
         <div className="transaction-history">
           <div className="transaction-header">

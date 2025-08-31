@@ -5,20 +5,19 @@ import { Types } from 'mongoose';
 import connectDB from '@/lib/mongodb';
 import User from '@/models/User';
 import Manager from '@/models/Manager';
-import Admin from '@/models/Admin';
 import Notification from '@/models/Notification';
 import { JwtPayload } from '@/types/jwt';
 import { Manager as ManagerType, User as UserType } from '@/types/models';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
 
-export async function POST(request: NextRequest) {
+export async function GET(request: NextRequest) {
   try {
     await connectDB();
 
     // Get admin token from cookie
     const cookieStore = await cookies();
-    const token = cookieStore.get('admin-token')?.value;
+    const token = cookieStore.get('manager-token')?.value;
 
     if (!token) {
       return NextResponse.json(
@@ -30,24 +29,83 @@ export async function POST(request: NextRequest) {
     // Verify admin token
     const decoded = jwt.verify(token, JWT_SECRET) as JwtPayload;
     
-    if (!decoded || !decoded.adminId) {
+    if (!decoded || !decoded.managerId) {
       return NextResponse.json(
         { error: 'Invalid token' },
         { status: 401 }
       );
     }
 
-    // Verify admin exists and is active
-    const admin = await Admin.findById(decoded.adminId);
-    if (!admin || !admin.isActive) {
+    // Verify manager exists and is active
+    const manager = await Manager.findById(decoded.managerId);
+    if (!manager || !manager.isActive) {
       return NextResponse.json(
-        { error: 'Admin access denied' },
+        { error: 'Manager access denied' },
         { status: 403 }
       );
     }
 
-    // Check if admin has permission to manage VIPs
-    if (!admin.permissions.includes('manage_vips')) {
+    // Check if manager has permission to view VIP stats
+    if (!manager.permissions.includes('manage_vips')) {
+      return NextResponse.json(
+        { error: 'Insufficient permissions' },
+        { status: 403 }
+      );
+    }
+
+    // Get VIP assignment statistics
+    const stats = await getVIPAssignmentStats();
+
+    return NextResponse.json({
+      message: 'VIP assignment statistics retrieved successfully',
+      stats
+    });
+
+  } catch (error: unknown) {
+    console.error('VIP stats error:', error);
+    return NextResponse.json(
+      { error: 'Failed to retrieve VIP statistics' },
+      { status: 500 }
+    );
+  }
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    await connectDB();
+
+    // Get admin token from cookie
+    const cookieStore = await cookies();
+    const token = cookieStore.get('manager-token')?.value;
+
+    if (!token) {
+      return NextResponse.json(
+        { error: 'Authentication required' },
+        { status: 401 }
+      );
+    }
+
+    // Verify admin token
+    const decoded = jwt.verify(token, JWT_SECRET) as JwtPayload;
+    
+    if (!decoded || !decoded.managerId) {
+      return NextResponse.json(
+        { error: 'Invalid token' },
+        { status: 401 }
+      );
+    }
+
+    // Verify manager exists and is active
+    const manager = await Manager.findById(decoded.managerId);
+    if (!manager || !manager.isActive) {
+      return NextResponse.json(
+        { error: 'Manager access denied' },
+        { status: 403 }
+      );
+    }
+
+    // Check if manager has permission to manage VIPs
+    if (!manager.permissions.includes('manage_vips')) {
       return NextResponse.json(
         { error: 'Insufficient permissions' },
         { status: 403 }
@@ -55,6 +113,14 @@ export async function POST(request: NextRequest) {
     }
 
     const { action, userId, managerId } = await request.json();
+
+    // Validate action
+    if (!action || !['auto-assign', 'manual-assign', 'redistribute'].includes(action)) {
+      return NextResponse.json(
+        { error: 'Invalid action. Use auto-assign, manual-assign, or redistribute' },
+        { status: 400 }
+      );
+    }
 
     if (action === 'auto-assign') {
       // Auto-assign VIPs to managers with load balancing
@@ -67,15 +133,19 @@ export async function POST(request: NextRequest) {
           { status: 400 }
         );
       }
+      
+      // Validate ObjectId format
+      if (!Types.ObjectId.isValid(userId) || !Types.ObjectId.isValid(managerId)) {
+        return NextResponse.json(
+          { error: 'Invalid User ID or Manager ID format' },
+          { status: 400 }
+        );
+      }
+      
       return await manualAssignVIP(userId, managerId);
     } else if (action === 'redistribute') {
       // Redistribute VIPs when managers leave/join
       return await redistributeVIPs();
-    } else {
-      return NextResponse.json(
-        { error: 'Invalid action. Use auto-assign, manual-assign, or redistribute' },
-        { status: 400 }
-      );
     }
 
   } catch (error: unknown) {
@@ -105,12 +175,15 @@ export async function POST(request: NextRequest) {
 // Auto-assign VIPs to managers with load balancing
 async function autoAssignVIPs() {
   try {
-    // Get all active managers
-    const managers = await Manager.find({ isActive: true }).sort({ currentVipCount: 1 });
+    // Get all active managers with permissions
+    const managers = await Manager.find({ 
+      isActive: true,
+      permissions: { $in: ['manage_vips'] }
+    }).sort({ currentVipCount: 1 });
     
     if (managers.length === 0) {
       return NextResponse.json(
-        { error: 'No active managers found. Please create managers first.' },
+        { error: 'No active managers with VIP management permissions found. Please create managers first.' },
         { status: 400 }
       );
     }
@@ -118,7 +191,11 @@ async function autoAssignVIPs() {
     // Get all VIP users without managers
     const unassignedVIPs = await User.find({
       vipLevel: { $exists: true, $ne: null },
-      assignedManager: { $exists: false }
+      vipStatus: 'active',
+      $or: [
+        { assignedManager: { $exists: false } },
+        { assignedManager: null }
+      ]
     });
 
     if (unassignedVIPs.length === 0) {
@@ -130,58 +207,94 @@ async function autoAssignVIPs() {
 
     let assignedCount = 0;
     const assignments = [];
+    const bulkUserUpdates = [];
+    const bulkManagerUpdates = [];
+    const notifications = [];
 
     for (const vip of unassignedVIPs) {
-      // Find manager with lowest VIP count
-      const manager = managers.reduce((prev: ManagerType, curr: ManagerType) => 
-        prev.currentVipCount < curr.currentVipCount ? prev : curr
-      );
-
-      // Check if manager has capacity
-      if (manager.currentVipCount >= manager.maxVipCapacity) {
-        continue; // Skip if manager is at capacity
+      // Find manager with lowest VIP count and capacity
+      const availableManager = managers.find(m => m.currentVipCount < m.maxVipCapacity);
+      
+      if (!availableManager) {
+        // All managers are at capacity
+        break;
       }
 
-      // Assign VIP to manager
-      vip.assignedManager = manager._id;
-      await vip.save();
+      // Prepare bulk updates
+      bulkUserUpdates.push({
+        updateOne: {
+          filter: { _id: vip._id },
+          update: { 
+            $set: { 
+              assignedManager: availableManager._id,
+              updatedAt: new Date()
+            }
+          }
+        }
+      });
 
-      // Update manager's VIP count
-      manager.assignedVips.push(vip._id);
-      await manager.save();
+      bulkManagerUpdates.push({
+        updateOne: {
+          filter: { _id: availableManager._id },
+          update: { 
+            $push: { assignedVips: vip._id },
+            $inc: { currentVipCount: 1 },
+            $set: { updatedAt: new Date() }
+          }
+        }
+      });
 
-      // Create notification for VIP
-      await Notification.create({
+      // Prepare notification
+      notifications.push({
         userId: vip._id,
         type: 'manager_change',
         title: 'Manager Assigned',
-        message: `You have been assigned to manager ${manager.name}. They will handle your withdrawals and support.`,
+        message: `You have been assigned to manager ${availableManager.name}. They will handle your withdrawals and support.`,
         relatedData: {
-          managerId: manager._id.toString(),
-          managerName: manager.name
-        }
+          managerId: availableManager._id.toString(),
+          managerName: availableManager.name
+        },
+        createdAt: new Date()
       });
 
       assignments.push({
         vipId: vip._id,
         vipName: vip.name,
-        managerId: manager._id,
-        managerName: manager.name
+        managerId: availableManager._id,
+        managerName: availableManager.name
       });
 
       assignedCount++;
+      
+      // Update manager's current count for next iteration
+      availableManager.currentVipCount++;
+    }
+
+    // Execute bulk operations
+    if (bulkUserUpdates.length > 0) {
+      await User.bulkWrite(bulkUserUpdates);
+    }
+    
+    if (bulkManagerUpdates.length > 0) {
+      await Manager.bulkWrite(bulkManagerUpdates);
+    }
+
+    // Create notifications in bulk
+    if (notifications.length > 0) {
+      await Notification.insertMany(notifications);
     }
 
     return NextResponse.json({
       message: `Successfully assigned ${assignedCount} VIPs to managers`,
       assignments,
-      totalAssigned: assignedCount
+      totalAssigned: assignedCount,
+      remainingUnassigned: unassignedVIPs.length - assignedCount
     });
 
   } catch (error) {
     console.error('Auto-assign error:', error);
     return NextResponse.json(
-      { error: 'Failed to auto-assign VIPs' },
+      { error: 'Failed to auto-assign VIPs', details: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }
     );
   }
@@ -225,24 +338,36 @@ async function manualAssignVIP(userId: string, managerId: string) {
 
     // Remove VIP from previous manager if any
     if (user.assignedManager) {
-      const previousManager = await Manager.findById(user.assignedManager);
-      if (previousManager) {
-        previousManager.assignedVips = previousManager.assignedVips.filter(
-          (id: Types.ObjectId) => id.toString() !== userId
-        );
-        await previousManager.save();
-      }
+      await Manager.updateOne(
+        { _id: user.assignedManager },
+        { 
+          $pull: { assignedVips: user._id },
+          $inc: { currentVipCount: -1 },
+          $set: { updatedAt: new Date() }
+        }
+      );
     }
 
     // Assign VIP to new manager
-    user.assignedManager = manager._id;
-    await user.save();
+    await User.updateOne(
+      { _id: user._id },
+      { 
+        $set: { 
+          assignedManager: manager._id,
+          updatedAt: new Date()
+        }
+      }
+    );
 
     // Update manager's VIP list
-    if (!manager.assignedVips.includes(user._id)) {
-      manager.assignedVips.push(user._id);
-      await manager.save();
-    }
+    await Manager.updateOne(
+      { _id: manager._id },
+      { 
+        $addToSet: { assignedVips: user._id },
+        $inc: { currentVipCount: 1 },
+        $set: { updatedAt: new Date() }
+      }
+    );
 
     // Create notification for VIP
     await Notification.create({
@@ -278,19 +403,23 @@ async function manualAssignVIP(userId: string, managerId: string) {
 // Redistribute VIPs when managers leave/join
 async function redistributeVIPs() {
   try {
-    // Get all active managers
-    const managers = await Manager.find({ isActive: true });
+    // Get all active managers with permissions
+    const managers = await Manager.find({ 
+      isActive: true,
+      permissions: { $in: ['manage_vips'] }
+    }).sort({ currentVipCount: 1 });
     
     if (managers.length === 0) {
       return NextResponse.json(
-        { error: 'No active managers found' },
+        { error: 'No active managers with VIP management permissions found' },
         { status: 400 }
       );
     }
 
     // Get all VIP users
     const allVIPs = await User.find({
-      vipLevel: { $exists: true, $ne: null }
+      vipLevel: { $exists: true, $ne: null },
+      vipStatus: 'active'
     });
 
     if (allVIPs.length === 0) {
@@ -303,25 +432,63 @@ async function redistributeVIPs() {
     // Calculate target VIPs per manager
     const targetVIPsPerManager = Math.ceil(allVIPs.length / managers.length);
     
-    // Clear all current assignments
-    for (const manager of managers) {
-      manager.assignedVips = [];
-      await manager.save();
-    }
+    // Clear all current assignments using bulk operations
+    await Manager.updateMany(
+      { isActive: true },
+      { 
+        $set: { 
+          assignedVips: [],
+          currentVipCount: 0,
+          updatedAt: new Date()
+        }
+      }
+    );
 
-    // Redistribute VIPs evenly
+    // Clear all user assignments
+    await User.updateMany(
+      { vipLevel: { $exists: true, $ne: null } },
+      { 
+        $unset: { assignedManager: "" },
+        $set: { updatedAt: new Date() }
+      }
+    );
+
+    // Prepare bulk operations for redistribution
+    const bulkUserUpdates = [];
+    const bulkManagerUpdates = [];
+    const notifications = [];
+
+    // Redistribute VIPs evenly with load balancing
     let managerIndex = 0;
     for (const vip of allVIPs) {
       const manager = managers[managerIndex % managers.length];
       
-      vip.assignedManager = manager._id;
-      await vip.save();
+      // Prepare bulk updates
+      bulkUserUpdates.push({
+        updateOne: {
+          filter: { _id: vip._id },
+          update: { 
+            $set: { 
+              assignedManager: manager._id,
+              updatedAt: new Date()
+            }
+          }
+        }
+      });
 
-      manager.assignedVips.push(vip._id);
-      await manager.save();
+      bulkManagerUpdates.push({
+        updateOne: {
+          filter: { _id: manager._id },
+          update: { 
+            $push: { assignedVips: vip._id },
+            $inc: { currentVipCount: 1 },
+            $set: { updatedAt: new Date() }
+          }
+        }
+      });
 
-      // Create notification for VIP
-      await Notification.create({
+      // Prepare notification
+      notifications.push({
         userId: vip._id,
         type: 'manager_change',
         title: 'Manager Redistributed',
@@ -329,24 +496,123 @@ async function redistributeVIPs() {
         relatedData: {
           managerId: manager._id.toString(),
           managerName: manager.name
-        }
+        },
+        createdAt: new Date()
       });
 
       managerIndex++;
+    }
+
+    // Execute bulk operations
+    if (bulkUserUpdates.length > 0) {
+      await User.bulkWrite(bulkUserUpdates);
+    }
+    
+    if (bulkManagerUpdates.length > 0) {
+      await Manager.bulkWrite(bulkManagerUpdates);
+    }
+
+    // Create notifications in bulk
+    if (notifications.length > 0) {
+      await Notification.insertMany(notifications);
     }
 
     return NextResponse.json({
       message: 'VIPs redistributed successfully',
       totalVIPs: allVIPs.length,
       totalManagers: managers.length,
-      targetVIPsPerManager
+      targetVIPsPerManager,
+      redistributionDetails: {
+        vipDistribution: managers.map(m => ({
+          managerId: m._id,
+          managerName: m.name,
+          assignedVIPs: Math.ceil(allVIPs.length / managers.length)
+        }))
+      }
     });
 
   } catch (error) {
     console.error('Redistribute error:', error);
     return NextResponse.json(
-      { error: 'Failed to redistribute VIPs' },
+      { error: 'Failed to redistribute VIPs', details: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }
     );
+  }
+}
+
+// Get VIP assignment statistics
+async function getVIPAssignmentStats() {
+  try {
+    // Get manager statistics
+    const managerStats = await Manager.aggregate([
+      { $match: { isActive: true } },
+      { $project: {
+        _id: 1,
+        name: 1,
+        currentVipCount: 1,
+        maxVipCapacity: 1,
+        capacityUtilization: { $divide: ['$currentVipCount', '$maxVipCapacity'] }
+      }},
+      { $sort: { currentVipCount: -1 } }
+    ]);
+
+    // Get VIP statistics
+    const vipStats = await User.aggregate([
+      { $match: { vipLevel: { $exists: true, $ne: null } } },
+      { $group: {
+        _id: null,
+        totalVIPs: { $sum: 1 },
+        assignedVIPs: { $sum: { $cond: [{ $ne: ['$assignedManager', null] }, 1, 0] } },
+        unassignedVIPs: { $sum: { $cond: [{ $eq: ['$assignedManager', null] }, 1, 0] } }
+      }}
+    ]);
+
+    // Get VIP level distribution
+    const vipLevelStats = await User.aggregate([
+      { $match: { vipLevel: { $exists: true, $ne: null } } },
+      { $group: {
+        _id: '$vipLevel',
+        count: { $sum: 1 }
+      }},
+      { $sort: { _id: 1 } }
+    ]);
+
+    // Get assignment efficiency
+    const totalManagers = managerStats.length;
+    const totalVIPs = vipStats[0]?.totalVIPs || 0;
+    const assignedVIPs = vipStats[0]?.assignedVIPs || 0;
+    const unassignedVIPs = vipStats[0]?.unassignedVIPs || 0;
+    
+    const assignmentEfficiency = totalVIPs > 0 ? (assignedVIPs / totalVIPs) * 100 : 0;
+    const averageVIPsPerManager = totalManagers > 0 ? assignedVIPs / totalManagers : 0;
+
+    return {
+      managers: {
+        total: totalManagers,
+        stats: managerStats,
+        averageCapacityUtilization: managerStats.reduce((sum, m) => sum + m.capacityUtilization, 0) / totalManagers || 0
+      },
+      vips: {
+        total: totalVIPs,
+        assigned: assignedVIPs,
+        unassigned: unassignedVIPs,
+        levelDistribution: vipLevelStats
+      },
+      efficiency: {
+        assignmentRate: assignmentEfficiency,
+        averageVIPsPerManager: averageVIPsPerManager,
+        totalCapacity: managerStats.reduce((sum, m) => sum + m.maxVipCapacity, 0),
+        usedCapacity: managerStats.reduce((sum, m) => sum + m.currentVipCount, 0)
+      },
+      recommendations: {
+        needsRedistribution: unassignedVIPs > 0,
+        loadBalancing: managerStats.some(m => m.capacityUtilization > 0.8),
+        capacityIssues: managerStats.some(m => m.currentVipCount >= m.maxVipCapacity)
+      }
+    };
+
+  } catch (error) {
+    console.error('Error getting VIP assignment stats:', error);
+    throw error;
   }
 }

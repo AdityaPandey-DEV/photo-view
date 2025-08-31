@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import jwt from 'jsonwebtoken';
 import connectDB from '@/lib/mongodb';
-import Admin from '@/models/Admin';
 import Manager from '@/models/Manager';
 import WithdrawalRequest from '@/models/WithdrawalRequest';
 import Notification from '@/models/Notification';
@@ -11,114 +10,66 @@ import WalletTransaction from '@/models/WalletTransaction';
 export async function POST(request: NextRequest) {
   try {
     await connectDB();
-
-    // Get admin/manager token from cookie
     const cookieStore = await cookies();
-    const token = cookieStore.get('admin-token')?.value;
-
+    const token = cookieStore.get('manager-token')?.value;
+    
     if (!token) {
-      return NextResponse.json(
-        { error: 'Authentication required' },
-        { status: 401 }
-      );
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
     }
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET!) as any;
+    const managerId = decoded.managerId;
     
-    // Check if it's an admin or manager
-    let manager = null;
-    let admin = null;
-    
-    if (decoded.managerId) {
-      manager = await Manager.findById(decoded.managerId);
-      if (!manager || !manager.isActive) {
-        return NextResponse.json(
-          { error: 'Manager access denied' },
-          { status: 403 }
-        );
-      }
-    } else if (decoded.adminId) {
-      admin = await Admin.findById(decoded.adminId);
-      if (!admin || !admin.isActive) {
-        return NextResponse.json(
-          { error: 'Admin access denied' },
-          { status: 403 }
-        );
-      }
-      
-      // Check if admin has permission to manage withdrawals
-      if (!admin.permissions.includes('manage_withdrawals')) {
-        return NextResponse.json(
-          { error: 'Insufficient permissions' },
-          { status: 403 }
-        );
-      }
-    } else {
-      return NextResponse.json(
-        { error: 'Invalid token' },
-        { status: 401 }
-      );
+    const { withdrawalId, action, notes, rejectionReason } = await request.json();
+
+    if (!withdrawalId || !action || !['approve', 'reject', 'process'].includes(action)) {
+      return NextResponse.json({ error: 'Invalid request' }, { status: 400 });
     }
 
-    const { 
-      withdrawalId, 
-      action, 
-      notes, 
-      rejectionReason 
-    } = await request.json();
-
-    if (!withdrawalId || !action) {
-      return NextResponse.json(
-        { error: 'Withdrawal ID and action are required' },
-        { status: 400 }
-      );
-    }
-
-    if (!['approve', 'reject', 'process'].includes(action)) {
-      return NextResponse.json(
-        { error: 'Invalid action. Use approve, reject, or process' },
-        { status: 400 }
-      );
-    }
-
-    // Find withdrawal request
+    // Get withdrawal request
     const withdrawalRequest = await WithdrawalRequest.findById(withdrawalId)
       .populate('userId', 'name phone')
       .populate('assignedManager', 'name');
 
     if (!withdrawalRequest) {
-      return NextResponse.json(
-        { error: 'Withdrawal request not found' },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: 'Withdrawal request not found' }, { status: 404 });
+    }
+
+    // Check if manager has permission to review this withdrawal
+    const manager = await Manager.findById(managerId);
+    
+    if (!manager || !manager.isActive) {
+      return NextResponse.json({ error: 'Manager access denied' }, { status: 403 });
+    }
+
+    // Check if manager has withdrawal management permissions
+    if (!manager.permissions.includes('manage_withdrawals')) {
+      return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403 });
     }
 
     // If it's a manager, check if they're assigned to this withdrawal
-    if (manager && withdrawalRequest.assignedManager.toString() !== manager._id.toString()) {
-      return NextResponse.json(
-        { error: 'You are not assigned to this withdrawal request' },
-        { status: 403 }
-      );
+    if (manager && withdrawalRequest.assignedManager?.toString() !== managerId) {
+      return NextResponse.json({ error: 'You can only review withdrawals assigned to you' }, { status: 403 });
     }
 
-    // Update withdrawal status based on action
     if (action === 'approve') {
+      // Approve withdrawal
       withdrawalRequest.status = 'approved';
       withdrawalRequest.reviewedAt = new Date();
       withdrawalRequest.managerNotes = notes || 'Approved by manager';
       
       await withdrawalRequest.save();
 
-      // Create notification for user
+      // Send notification to user
       await Notification.create({
         userId: withdrawalRequest.userId._id,
         type: 'withdrawal_approved',
         title: 'Withdrawal Approved',
         message: `Your withdrawal request for ₹${withdrawalRequest.amount} has been approved and will be processed within 24 hours.`,
-        relatedData: {
-          withdrawalId: withdrawalRequest._id.toString(),
-          amount: withdrawalRequest.amount,
-          netAmount: withdrawalRequest.netAmount
+        relatedData: { 
+          withdrawalId: withdrawalRequest._id.toString(), 
+          amount: withdrawalRequest.amount, 
+          netAmount: withdrawalRequest.netAmount 
         }
       });
 
@@ -133,11 +84,9 @@ export async function POST(request: NextRequest) {
       });
 
     } else if (action === 'reject') {
+      // Reject withdrawal
       if (!rejectionReason) {
-        return NextResponse.json(
-          { error: 'Rejection reason is required' },
-          { status: 400 }
-        );
+        return NextResponse.json({ error: 'Rejection reason is required' }, { status: 400 });
       }
 
       withdrawalRequest.status = 'rejected';
@@ -147,16 +96,16 @@ export async function POST(request: NextRequest) {
       
       await withdrawalRequest.save();
 
-      // Create notification for user
+      // Send notification to user
       await Notification.create({
         userId: withdrawalRequest.userId._id,
         type: 'withdrawal_rejected',
         title: 'Withdrawal Rejected',
         message: `Your withdrawal request for ₹${withdrawalRequest.amount} was rejected. Reason: ${rejectionReason}`,
-        relatedData: {
-          withdrawalId: withdrawalRequest._id.toString(),
-          amount: withdrawalRequest.amount,
-          rejectionReason: rejectionReason
+        relatedData: { 
+          withdrawalId: withdrawalRequest._id.toString(), 
+          amount: withdrawalRequest.amount, 
+          rejectionReason: rejectionReason 
         }
       });
 
@@ -171,12 +120,9 @@ export async function POST(request: NextRequest) {
       });
 
     } else if (action === 'process') {
-      // Only approved withdrawals can be processed
+      // Process approved withdrawal
       if (withdrawalRequest.status !== 'approved') {
-        return NextResponse.json(
-          { error: 'Only approved withdrawals can be processed' },
-          { status: 400 }
-        );
+        return NextResponse.json({ error: 'Only approved withdrawals can be processed' }, { status: 400 });
       }
 
       withdrawalRequest.status = 'processing';
@@ -184,29 +130,28 @@ export async function POST(request: NextRequest) {
       
       await withdrawalRequest.save();
 
-      // Create notification for user
+      // Send notification to user
       await Notification.create({
         userId: withdrawalRequest.userId._id,
         type: 'withdrawal_processing',
         title: 'Withdrawal Processing',
-        message: `Your withdrawal of ₹${withdrawalRequest.amount} is now being processed. You will receive the payment within 24-48 hours.`,
-        relatedData: {
-          withdrawalId: withdrawalRequest._id.toString(),
-          amount: withdrawalRequest.amount,
-          netAmount: withdrawalRequest.netAmount
+        message: `Your withdrawal of ₹${withdrawalRequest.amount} is now being processed.`,
+        relatedData: { 
+          withdrawalId: withdrawalRequest._id.toString(), 
+          amount: withdrawalRequest.amount, 
+          netAmount: withdrawalRequest.netAmount 
         }
       });
 
-      // Simulate payment processing (in real system, integrate with payment gateway)
+      // Simulate payment processing (in real implementation, this would integrate with payment gateways)
       // For now, we'll mark it as completed after a delay
       setTimeout(async () => {
         try {
-          await WithdrawalRequest.findByIdAndUpdate(withdrawalRequest._id, {
-            status: 'completed'
-          });
+          withdrawalRequest.status = 'completed';
+          await withdrawalRequest.save();
 
           // Create wallet transaction for the withdrawal
-          await WalletTransaction.create({
+          const transaction = new WalletTransaction({
             userId: withdrawalRequest.userId._id,
             type: 'withdrawal',
             amount: -withdrawalRequest.amount,
@@ -215,24 +160,24 @@ export async function POST(request: NextRequest) {
             reference: `withdrawal_${withdrawalRequest._id}`,
             status: 'completed'
           });
+          await transaction.save();
 
-          // Create notification for user
+          // Send completion notification
           await Notification.create({
             userId: withdrawalRequest.userId._id,
             type: 'withdrawal_completed',
             title: 'Withdrawal Completed',
-            message: `Your withdrawal of ₹${withdrawalRequest.amount} has been processed successfully. Net amount ₹${withdrawalRequest.netAmount} has been sent to your ${withdrawalRequest.paymentMethod === 'UPI' ? 'UPI ID' : 'bank account'}.`,
-            relatedData: {
-              withdrawalId: withdrawalRequest._id.toString(),
-              amount: withdrawalRequest.amount,
-              netAmount: withdrawalRequest.netAmount,
-              paymentMethod: withdrawalRequest.paymentMethod
+            message: `Your withdrawal of ₹${withdrawalRequest.amount} has been processed successfully. Net amount: ₹${withdrawalRequest.netAmount}`,
+            relatedData: { 
+              withdrawalId: withdrawalRequest._id.toString(), 
+              amount: withdrawalRequest.amount, 
+              netAmount: withdrawalRequest.netAmount 
             }
           });
         } catch (error) {
           console.error('Error completing withdrawal:', error);
         }
-      }, 5000); // Simulate 5 second processing time
+      }, 5000); // 5 second delay for demo
 
       return NextResponse.json({
         message: 'Withdrawal processing started successfully',
@@ -245,11 +190,12 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
+
   } catch (error: any) {
     console.error('Withdrawal review error:', error);
-    return NextResponse.json(
-      { error: 'Failed to process withdrawal review' },
-      { status: 500 }
-    );
+    return NextResponse.json({ 
+      error: 'Failed to process withdrawal review' 
+    }, { status: 500 });
   }
 }

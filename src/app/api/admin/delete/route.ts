@@ -13,7 +13,7 @@ export async function DELETE(request: NextRequest) {
 
     // Get admin token from cookie
     const cookieStore = await cookies();
-    const token = cookieStore.get('admin-token')?.value;
+    const token = cookieStore.get('manager-token')?.value;
 
     if (!token) {
       return NextResponse.json(
@@ -25,7 +25,7 @@ export async function DELETE(request: NextRequest) {
     // Verify admin token
     const decoded = jwt.verify(token, JWT_SECRET) as JwtPayload;
     
-    if (!decoded || !decoded.adminId) {
+    if (!decoded || !decoded.managerId) {
       return NextResponse.json(
         { error: 'Invalid token' },
         { status: 401 }
@@ -33,7 +33,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     // Verify admin exists and is active
-    const currentAdmin = await Admin.findById(decoded.adminId);
+    const currentAdmin = await Manager.findById(decoded.managerId);
     if (!currentAdmin || !currentAdmin.isActive) {
       return NextResponse.json(
         { error: 'Admin access denied' },
@@ -57,9 +57,9 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    const { adminId } = await request.json();
+    const { managerId } = await request.json();
 
-    if (!adminId) {
+    if (!managerId) {
       return NextResponse.json(
         { error: 'Admin ID is required' },
         { status: 400 }
@@ -67,7 +67,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     // Prevent self-deletion
-    if (adminId === currentAdmin._id.toString()) {
+    if (managerId === currentAdmin._id.toString()) {
       return NextResponse.json(
         { error: 'Cannot delete your own account' },
         { status: 400 }
@@ -75,7 +75,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     // Find the admin to delete
-    const adminToDelete = await Admin.findById(adminId);
+    const adminToDelete = await Manager.findById(managerId);
     if (!adminToDelete) {
       return NextResponse.json(
         { error: 'Admin not found' },
@@ -92,7 +92,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     // Delete the admin
-    await Admin.findByIdAndDelete(adminId);
+    await Manager.findByIdAndDelete(managerId);
 
     return NextResponse.json({
       message: 'Admin deleted successfully'

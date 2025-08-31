@@ -1,5 +1,6 @@
 export interface JwtPayload {
-  adminId: string;
+  adminId?: string;
+  managerId?: string;
   iat?: number;
   exp?: number;
 }

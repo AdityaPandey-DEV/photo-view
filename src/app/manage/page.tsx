@@ -6,9 +6,9 @@ import { Shield, Eye, EyeOff, AlertCircle } from 'lucide-react';
 
 export default function ManagePage() {
   const router = useRouter();
-  const [username, setUsername] = useState('aditya-admin');
-  const [password, setPassword] = useState('Ad282499');
-  const [showPassword, setShowPassword] = useState(false);
+  const [email, setEmail] = useState('adityapandey.dev.in@gmail.com');
+  const [otp, setOtp] = useState('');
+  const [otpSent, setOtpSent] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -30,7 +30,7 @@ export default function ManagePage() {
     }
   };
 
-  const handleLogin = async (e: React.FormEvent) => {
+  const handleSendOTP = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError('');
@@ -39,7 +39,34 @@ export default function ManagePage() {
       const response = await fetch('/api/admin/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify({ email }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        setOtpSent(true);
+        setError('');
+      } else {
+        setError(data.error || 'Failed to send OTP');
+      }
+    } catch (error) {
+      setError('Network error. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerifyOTP = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+
+    try {
+      const response = await fetch('/api/admin/verify-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, otp }),
       });
 
       const data = await response.json();
@@ -48,7 +75,7 @@ export default function ManagePage() {
         setIsAuthenticated(true);
         router.push('/manage/dashboard');
       } else {
-        setError(data.error || 'Login failed');
+        setError(data.error || 'OTP verification failed');
       }
     } catch (error) {
       setError('Network error. Please try again.');
@@ -75,70 +102,96 @@ export default function ManagePage() {
             <div className="logo">
               <Shield className="logo-icon" />
             </div>
-            <h1>Admin Panel</h1>
+            <h1>Manager Panel</h1>
             <p>VIP Management System</p>
           </div>
 
-          <form onSubmit={handleLogin} className="login-form">
-            {error && (
-              <div className="error-message">
-                <AlertCircle className="icon" />
-                {error}
-              </div>
-            )}
+          {!otpSent ? (
+            <form onSubmit={handleSendOTP} className="login-form">
+              {error && (
+                <div className="error-message">
+                  <AlertCircle className="icon" />
+                  {error}
+                </div>
+              )}
 
-            <div className="form-field">
-              <label htmlFor="username" className="form-label">
-                Admin ID
-              </label>
-              <input
-                id="username"
-                type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                className="form-input"
-                placeholder="Enter admin ID"
-                required
-              />
-            </div>
-
-            <div className="form-field">
-              <label htmlFor="password" className="form-label">
-                Password
-              </label>
-              <div className="password-input-container">
+              <div className="form-field">
+                <label htmlFor="email" className="form-label">
+                  Email Address
+                </label>
                 <input
-                  id="password"
-                  type={showPassword ? 'text' : 'password'}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  id="email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
                   className="form-input"
-                  placeholder="Enter password"
+                  placeholder="Enter your email"
                   required
                 />
-                <button
-                  type="button"
-                  className="password-toggle"
-                  onClick={() => setShowPassword(!showPassword)}
-                >
-                  {showPassword ? <EyeOff className="icon" /> : <Eye className="icon" />}
-                </button>
               </div>
-            </div>
 
-            <button 
-              type="submit" 
-              className="login-btn" 
-              disabled={loading}
-            >
-              {loading ? 'Signing In...' : 'Sign In'}
-            </button>
-          </form>
+              <button 
+                type="submit" 
+                className="login-btn" 
+                disabled={loading}
+              >
+                {loading ? 'Sending OTP...' : 'Send OTP'}
+              </button>
+            </form>
+          ) : (
+            <form onSubmit={handleVerifyOTP} className="login-form">
+              {error && (
+                <div className="error-message">
+                  <AlertCircle className="icon" />
+                  {error}
+                </div>
+              )}
+
+              <div className="form-field">
+                <label htmlFor="otp" className="form-label">
+                  Enter OTP
+                </label>
+                <input
+                  id="otp"
+                  type="text"
+                  value={otp}
+                  onChange={(e) => setOtp(e.target.value)}
+                  className="form-input"
+                  placeholder="Enter 6-digit OTP"
+                  maxLength={6}
+                  required
+                />
+                <p className="otp-info">
+                  OTP sent to {email}
+                </p>
+              </div>
+
+              <button 
+                type="submit" 
+                className="login-btn" 
+                disabled={loading}
+              >
+                {loading ? 'Verifying...' : 'Verify OTP'}
+              </button>
+
+              <button 
+                type="button" 
+                className="back-btn" 
+                onClick={() => {
+                  setOtpSent(false);
+                  setOtp('');
+                  setError('');
+                }}
+              >
+                Back to Email
+              </button>
+            </form>
+          )}
 
           <div className="login-footer">
             <p className="security-note">
               <Shield className="icon" />
-              Secure Admin Access
+              Secure Manager Access
             </p>
             <div className="credentials-info" style={{
               background: 'rgba(30, 58, 138, 0.1)',
@@ -148,9 +201,8 @@ export default function ManagePage() {
               fontSize: '0.875rem',
               color: '#1e3a8a'
             }}>
-              <strong>Default Credentials:</strong><br/>
-              ID: aditya-admin<br/>
-              Password: Ad282499
+              <strong>Login with your registered email</strong><br/>
+              OTP will be sent to your email address
             </div>
           </div>
         </div>
