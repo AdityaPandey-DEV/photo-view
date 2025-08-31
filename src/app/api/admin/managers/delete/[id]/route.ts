@@ -6,7 +6,7 @@ import Manager from '@/models/Manager';
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     await connectDB();
@@ -31,7 +31,7 @@ export async function DELETE(
       return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403 });
     }
 
-    const { id } = params;
+    const { id } = await params;
 
     // Prevent self-deletion
     if (id === managerId) {

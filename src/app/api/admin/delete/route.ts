@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import jwt from 'jsonwebtoken';
 import connectDB from '@/lib/mongodb';
-import Admin from '@/models/Admin';
+import Manager from '@/models/Manager';
 import { JwtPayload } from '@/types/jwt';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
@@ -32,27 +32,19 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    // Verify admin exists and is active
-    const currentAdmin = await Manager.findById(decoded.managerId);
-    if (!currentAdmin || !currentAdmin.isActive) {
+    // Verify manager exists and is active
+    const currentManager = await Manager.findById(decoded.managerId);
+    if (!currentManager || !currentManager.isActive) {
       return NextResponse.json(
-        { error: 'Admin access denied' },
+        { error: 'Manager access denied' },
         { status: 403 }
       );
     }
 
-    // Check if admin has permission to manage admins
-    if (!currentAdmin.permissions.includes('manage_admins')) {
+    // Check if manager has permission to manage managers
+    if (!currentManager.permissions.includes('manage_managers')) {
       return NextResponse.json(
         { error: 'Insufficient permissions' },
-        { status: 403 }
-      );
-    }
-
-    // Only super_admin can delete admins
-    if (currentAdmin.role !== 'super_admin') {
-      return NextResponse.json(
-        { error: 'Only super admins can delete admins' },
         { status: 403 }
       );
     }
@@ -61,41 +53,41 @@ export async function DELETE(request: NextRequest) {
 
     if (!managerId) {
       return NextResponse.json(
-        { error: 'Admin ID is required' },
+        { error: 'Manager ID is required' },
         { status: 400 }
       );
     }
 
     // Prevent self-deletion
-    if (managerId === currentAdmin._id.toString()) {
+    if (managerId === currentManager._id.toString()) {
       return NextResponse.json(
         { error: 'Cannot delete your own account' },
         { status: 400 }
       );
     }
 
-    // Find the admin to delete
-    const adminToDelete = await Manager.findById(managerId);
-    if (!adminToDelete) {
+    // Find the manager to delete
+    const managerToDelete = await Manager.findById(managerId);
+    if (!managerToDelete) {
       return NextResponse.json(
-        { error: 'Admin not found' },
+        { error: 'Manager not found' },
         { status: 404 }
       );
     }
 
-    // Prevent deletion of other super admins
-    if (adminToDelete.role === 'super_admin') {
+    // Check if manager has assigned VIPs or withdrawals
+    if (managerToDelete.assignedVips.length > 0 || managerToDelete.assignedWithdrawals.length > 0) {
       return NextResponse.json(
-        { error: 'Cannot delete other super admins' },
-        { status: 403 }
+        { error: 'Cannot delete manager with assigned VIPs or withdrawals. Please reassign them first.' },
+        { status: 400 }
       );
     }
 
-    // Delete the admin
+    // Delete the manager
     await Manager.findByIdAndDelete(managerId);
 
     return NextResponse.json({
-      message: 'Admin deleted successfully'
+      message: 'Manager deleted successfully'
     });
 
   } catch (error: unknown) {

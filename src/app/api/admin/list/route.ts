@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import jwt from 'jsonwebtoken';
 import connectDB from '@/lib/mongodb';
-import Admin from '@/models/Admin';
+import Manager from '@/models/Manager';
 import { JwtPayload } from '@/types/jwt';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
@@ -32,38 +32,38 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Verify admin exists and is active
-    const currentAdmin = await Manager.findById(decoded.managerId);
-    if (!currentAdmin || !currentAdmin.isActive) {
+    // Verify manager exists and is active
+    const currentManager = await Manager.findById(decoded.managerId);
+    if (!currentManager || !currentManager.isActive) {
       return NextResponse.json(
-        { error: 'Admin access denied' },
+        { error: 'Manager access denied' },
         { status: 403 }
       );
     }
 
-    // Check if admin has permission to manage admins
-    if (!currentAdmin.permissions.includes('manage_admins')) {
+    // Check if manager has permission to manage managers
+    if (!currentManager.permissions.includes('manage_managers')) {
       return NextResponse.json(
         { error: 'Insufficient permissions' },
         { status: 403 }
       );
     }
 
-    // Fetch all admins (excluding passwords)
-    const admins = await Admin.find({}).select('-password').sort({ createdAt: -1 });
+    // Fetch all managers (excluding passwords)
+    const managers = await Manager.find({}).select('-password').sort({ createdAt: -1 });
 
     return NextResponse.json({
-      admins: admins.map(admin => ({
-        id: admin._id,
-        username: admin.username,
-        name: admin.name,
-        email: admin.email,
-        role: admin.role,
-        permissions: admin.permissions,
+      managers: managers.map(manager => ({
+        id: manager._id,
+        username: manager.username,
+        name: manager.name,
+        email: manager.email,
+        permissions: manager.permissions,
         isActive: manager.isActive,
-        lastLogin: admin.lastLogin,
-        createdAt: admin.createdAt,
-        updatedAt: admin.updatedAt
+        maxVipCapacity: manager.maxVipCapacity,
+        currentVipCount: manager.currentVipCount,
+        createdAt: manager.createdAt,
+        updatedAt: manager.updatedAt
       }))
     });
 

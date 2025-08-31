@@ -6,7 +6,7 @@ import Manager from '@/models/Manager';
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     await connectDB();
@@ -31,7 +31,7 @@ export async function PUT(
       return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403 });
     }
 
-    const { id } = params;
+    const { id } = await params;
     const updateData = await request.json();
 
     // Validate required fields

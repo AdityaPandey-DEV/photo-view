@@ -4,7 +4,7 @@ import jwt from 'jsonwebtoken';
 import connectDB from '@/lib/mongodb';
 import Manager from '@/models/Manager';
 import { sendOTPEmail } from '@/lib/emailService';
-import { storeOTP } from '@/lib/otpService';
+import { storeOTP, generateOTP } from '@/lib/otpService';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
 
@@ -72,8 +72,11 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Generate and store OTP
-    const otp = storeOTP(email, manager._id.toString());
+    // Generate OTP
+    const otp = generateOTP();
+    
+    // Store OTP
+    await storeOTP(email, manager._id.toString());
     
     // Update manager record
     manager.lastOtpSentAt = now;
@@ -81,7 +84,8 @@ export async function POST(request: NextRequest) {
     await manager.save();
 
     // Send OTP email
-    const emailResult = await sendOTPEmail(email, otp, manager.name);
+    const managerName = String(manager.name || 'Manager');
+    const emailResult = await sendOTPEmail(email, otp, managerName);
     
     if (!emailResult.success) {
       return NextResponse.json(

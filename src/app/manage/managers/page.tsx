@@ -847,8 +847,8 @@ export default function ManagersPage() {
             }}>
               <strong>🔍 Withdrawal Debug Info:</strong><br/>
               Total Withdrawal Requests: {withdrawals.length}<br/>
-              Search Term: "{searchTerm}"<br/>
-              Filter Status: "{filterStatus}"<br/>
+              Search Term: &quot;{searchTerm}&quot;<br/>
+              Filter Status: &quot;{filterStatus}&quot;<br/>
               Filtered Results: {filteredWithdrawals.length}<br/>
               Loading: {loading ? 'Yes' : 'No'}
             </div>

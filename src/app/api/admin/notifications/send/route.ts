@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import jwt from 'jsonwebtoken';
 import connectDB from '@/lib/mongodb';
-import Admin from '@/models/Admin';
+import Manager from '@/models/Manager';
 import Notification from '@/models/Notification';
 import { JwtPayload } from '@/types/jwt';
 
@@ -33,17 +33,17 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Verify admin exists and is active
+    // Verify manager exists and is active
     const manager = await Manager.findById(decoded.managerId);
-    if (!admin || !manager.isActive) {
+    if (!manager || !manager.isActive) {
       return NextResponse.json(
-        { error: 'Admin access denied' },
+        { error: 'Manager access denied' },
         { status: 403 }
       );
     }
 
-    // Check if admin has permission to manage VIPs
-    if (!admin.permissions.includes('manage_vips')) {
+    // Check if manager has permission to manage VIPs
+    if (!manager.permissions.includes('manage_vips')) {
       return NextResponse.json(
         { error: 'Insufficient permissions' },
         { status: 403 }

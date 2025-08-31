@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import jwt from 'jsonwebtoken';
 import connectDB from '@/lib/mongodb';
-import Admin from '@/models/Admin';
+import Manager from '@/models/Manager';
 import { JwtPayload, MongoError } from '@/types/jwt';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
@@ -32,27 +32,27 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Verify admin exists and is active
-    const currentAdmin = await Manager.findById(decoded.managerId);
-    if (!currentAdmin || !currentAdmin.isActive) {
+    // Verify manager exists and is active
+    const currentManager = await Manager.findById(decoded.managerId);
+    if (!currentManager || !currentManager.isActive) {
       return NextResponse.json(
-        { error: 'Admin access denied' },
+        { error: 'Manager access denied' },
         { status: 403 }
       );
     }
 
-    // Check if admin has permission to manage admins
-    if (!currentAdmin.permissions.includes('manage_admins')) {
+    // Check if manager has permission to manage managers
+    if (!currentManager.permissions.includes('manage_managers')) {
       return NextResponse.json(
         { error: 'Insufficient permissions' },
         { status: 403 }
       );
     }
 
-    // Only super_admin can create new admins
-    if (currentAdmin.role !== 'super_admin') {
+    // Only admin role can create new managers
+    if (!currentManager.permissions.includes('manage_managers')) {
       return NextResponse.json(
-        { error: 'Only super admins can create new admins' },
+        { error: 'Only managers with manage_managers permission can create new managers' },
         { status: 403 }
       );
     }
@@ -82,18 +82,10 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if username already exists
-    const existingAdmin = await Admin.findOne({ username });
-    if (existingAdmin) {
+    const existingManager = await Manager.findOne({ username });
+    if (existingManager) {
       return NextResponse.json(
         { error: 'Username already exists' },
-        { status: 400 }
-      );
-    }
-
-    // Validate role
-    if (role && !['admin', 'super_admin'].includes(role)) {
-      return NextResponse.json(
-        { error: 'Invalid role. Must be admin or super_admin' },
         { status: 400 }
       );
     }
@@ -102,7 +94,8 @@ export async function POST(request: NextRequest) {
     const validPermissions = [
       'manage_users',
       'manage_vips', 
-      'manage_admins',
+      'manage_managers',
+      'manage_withdrawals',
       'view_analytics',
       'manage_payments'
     ];
@@ -125,34 +118,38 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Create new admin
-    const newAdmin = new Admin({
+    // Create new manager
+    const newManager = new Manager({
       username,
       password,
       name,
       email: email || undefined,
-      role: role || 'admin',
       permissions: permissions || ['manage_users', 'view_analytics'],
-      isActive: true
+      isActive: true,
+      maxVipCapacity: 50,
+      currentVipCount: 0,
+      assignedVips: [],
+      assignedWithdrawals: [],
+      totalWithdrawalsProcessed: 0,
+      totalAmountProcessed: 0
     });
 
-    await newAdmin.save();
+    await newManager.save();
 
-    // Return admin data without password
-    const adminData = {
-      id: newAdmin._id,
-      username: newAdmin.username,
-      name: newAdmin.name,
-      email: newAdmin.email,
-      role: newAdmin.role,
-      permissions: newAdmin.permissions,
-      isActive: newAdmin.isActive,
-      createdAt: newAdmin.createdAt
+    // Return manager data without password
+    const managerData = {
+      id: newManager._id,
+      username: newManager.username,
+      name: newManager.name,
+      email: newManager.email,
+      permissions: newManager.permissions,
+      isActive: newManager.isActive,
+      createdAt: newManager.createdAt
     };
 
     return NextResponse.json({
-      message: 'Admin created successfully',
-      admin: adminData
+      message: 'Manager created successfully',
+      manager: managerData
     });
 
   } catch (error: unknown) {
