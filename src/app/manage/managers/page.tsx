@@ -922,80 +922,90 @@ export default function ManagersPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredWithdrawals.map((request, index) => (
-                    <tr key={request._id || `withdrawal-${index}`}>
-                      <td>
-                        <div className="user-info">
-                          <div className="user-name">{request.userId.name}</div>
-                          <div className="user-phone">{request.userId.phone}</div>
-                        </div>
-                      </td>
-                      <td>
-                        <div className="amount-info">
-                          <div className="amount">₹{request.amount}</div>
-                        </div>
-                      </td>
-                      <td>
-                        <span className={`payment-method ${request.paymentMethod.toLowerCase()}`}>
-                          {request.paymentMethod}
-                        </span>
-                      </td>
-                      <td>
-                        <span className={`status-badge status-${request.status}`}>
-                          {request.status}
-                        </span>
+                  {filteredWithdrawals.map((request, index) => {
+                    console.log('🔍 Rendering withdrawal row:', { request, index });
+                    return (
+                      <tr key={request._id || `withdrawal-${index}`}>
+                        <td>
+                          <div className="user-info">
+                            <div className="user-name">{request.userId?.name || 'Unknown'}</div>
+                            <div className="user-phone">{request.userId?.phone || 'Unknown'}</div>
+                          </div>
                         </td>
-                      <td>
-                        <span className="payment-details">
-                          {request.paymentMethod === 'UPI' ? (
-                            <span>UPI: {request.paymentDetails?.upiId}</span>
-                          ) : (
-                            <span>Bank: {request.paymentDetails?.bankName} - {request.paymentDetails?.accountHolderName}</span>
-                          )}
-                        </span>
-                      </td>
-                      <td>{new Date(request.submittedAt).toLocaleDateString()}</td>
-                      <td>
-                        <div className="action-buttons">
-                          {request.status === 'pending' && (
-                            <>
+                        <td>
+                          <div className="amount-info">
+                            <div className="amount">₹{request.amount || 0}</div>
+                          </div>
+                        </td>
+                        <td>
+                          <span className={`payment-method ${(request.paymentMethod || '').toLowerCase()}`}>
+                            {request.paymentMethod || 'Unknown'}
+                          </span>
+                        </td>
+                        <td>
+                          <span className={`status-badge status-${request.status || 'unknown'}`}>
+                            {request.status || 'unknown'}
+                          </span>
+                        </td>
+                        <td>
+                          <span className="payment-details">
+                            {request.paymentMethod === 'UPI' ? (
+                              <span>UPI: {request.paymentDetails?.upiId || 'N/A'}</span>
+                            ) : (
+                              <span>Bank: {request.paymentDetails?.bankName || 'N/A'} - {request.paymentDetails?.accountHolderName || 'N/A'}</span>
+                            )}
+                          </span>
+                        </td>
+                        <td>{request.submittedAt ? new Date(request.submittedAt).toLocaleDateString() : 'N/A'}</td>
+                        <td>
+                          <div className="action-buttons">
+                            {request.status === 'pending' && (
+                              <>
+                                <button 
+                                  className="action-btn approve" 
+                                  title="Approve"
+                                  onClick={() => {
+                                    console.log('🔍 Approving withdrawal:', request._id);
+                                    handleWithdrawalAction(request._id, 'approve');
+                                  }}
+                                >
+                                  <CheckCircle className="icon" />
+                                </button>
+                                <button 
+                                  className="action-btn reject" 
+                                  title="Reject"
+                                  onClick={() => {
+                                    const reason = prompt('Enter rejection reason:');
+                                    if (reason) {
+                                      console.log('🔍 Rejecting withdrawal:', request._id, reason);
+                                      handleWithdrawalAction(request._id, 'reject', undefined, reason);
+                                    }
+                                  }}
+                                >
+                                  <XCircle className="icon" />
+                                </button>
+                              </>
+                            )}
+                            {request.status === 'approved' && (
                               <button 
-                                className="action-btn approve" 
-                                title="Approve"
-                                onClick={() => handleWithdrawalAction(request._id, 'approve')}
-                              >
-                                <CheckCircle className="icon" />
-                              </button>
-                              <button 
-                                className="action-btn reject" 
-                                title="Reject"
+                                className="action-btn process" 
+                                title="Mark as Paid"
                                 onClick={() => {
-                                  const reason = prompt('Enter rejection reason:');
-                                  if (reason) {
-                                    handleWithdrawalAction(request._id, 'reject', undefined, reason);
-                                  }
+                                  console.log('🔍 Marking withdrawal as paid:', request._id);
+                                  handleWithdrawalAction(request._id, 'mark-paid');
                                 }}
                               >
-                                <XCircle className="icon" />
+                                <Clock className="icon" />
                               </button>
-                            </>
-                          )}
-                          {request.status === 'approved' && (
-                            <button 
-                              className="action-btn process" 
-                              title="Mark as Paid"
-                              onClick={() => handleWithdrawalAction(request._id, 'mark-paid')}
-                            >
-                              <Clock className="icon" />
+                            )}
+                            <button className="action-btn view" title="View Details">
+                              <Eye className="icon" />
                             </button>
-                          )}
-                          <button className="action-btn view" title="View Details">
-                            <Eye className="icon" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             )}

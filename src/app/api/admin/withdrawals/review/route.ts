@@ -21,8 +21,29 @@ export async function POST(request: NextRequest) {
     
     const { withdrawalId, action, notes, rejectionReason } = await request.json();
 
-    if (!withdrawalId || !action || !['approve', 'reject', 'mark-paid'].includes(action)) {
-      return NextResponse.json({ error: 'Invalid request' }, { status: 400 });
+    console.log('🔍 Withdrawal review request:', { withdrawalId, action, notes, rejectionReason });
+
+    // Validate required fields
+    if (!withdrawalId) {
+      return NextResponse.json({ error: 'Withdrawal ID is required' }, { status: 400 });
+    }
+
+    if (!action) {
+      return NextResponse.json({ error: 'Action is required' }, { status: 400 });
+    }
+
+    // Validate action type
+    if (!['approve', 'reject', 'mark-paid'].includes(action)) {
+      return NextResponse.json({ 
+        error: 'Invalid action. Must be one of: approve, reject, mark-paid' 
+      }, { status: 400 });
+    }
+
+    // Validate rejection reason if action is reject
+    if (action === 'reject' && !rejectionReason) {
+      return NextResponse.json({ 
+        error: 'Rejection reason is required when rejecting a withdrawal' 
+      }, { status: 400 });
     }
 
     // Get withdrawal request
@@ -32,6 +53,8 @@ export async function POST(request: NextRequest) {
     if (!withdrawal) {
       return NextResponse.json({ error: 'Withdrawal request not found' }, { status: 404 });
     }
+
+    console.log('✅ Withdrawal found:', { id: withdrawal._id, status: withdrawal.status });
 
     // Check if manager has permission to review this withdrawal
     const manager = await Manager.findById(managerId);
@@ -44,6 +67,8 @@ export async function POST(request: NextRequest) {
     if (!manager.permissions.includes('manage_withdrawals')) {
       return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403 });
     }
+
+    console.log('✅ Manager authorized:', { id: manager._id, name: manager.name });
 
     if (action === 'approve') {
       // Approve withdrawal
@@ -75,10 +100,6 @@ export async function POST(request: NextRequest) {
 
     } else if (action === 'reject') {
       // Reject withdrawal
-      if (!rejectionReason) {
-        return NextResponse.json({ error: 'Rejection reason is required' }, { status: 400 });
-      }
-
       withdrawal.status = 'rejected';
       withdrawal.managerNotes = notes || 'Rejected by manager';
       
@@ -146,7 +167,8 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     console.error('Withdrawal review error:', error);
     return NextResponse.json({ 
-      error: 'Failed to process withdrawal review' 
+      error: 'Failed to process withdrawal review',
+      details: error.message || 'Unknown error occurred'
     }, { status: 500 });
   }
 }
