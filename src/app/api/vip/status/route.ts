@@ -39,39 +39,43 @@ export async function GET(request: NextRequest) {
       monthlyReturns: user.monthlyReturns
     });
 
-    // Get VIP level details and limits - simplified for now
-    let vipDetails = {
+    // Calculate VIP benefits based on level
+    let dailyTaskLimit = 0;
+    let dailyEarnings = 0;
+    let monthlyTaskLimit = 0;
+    
+    if (user.vipLevel) {
+      switch (user.vipLevel) {
+        case 'VIP1':
+          dailyTaskLimit = 5;
+          dailyEarnings = 30;
+          monthlyTaskLimit = 150;
+          break;
+        case 'VIP2':
+          dailyTaskLimit = 10;
+          dailyEarnings = 100;
+          monthlyTaskLimit = 300;
+          break;
+        case 'VIP3':
+          dailyTaskLimit = 20;
+          dailyEarnings = 370;
+          monthlyTaskLimit = 600;
+          break;
+      }
+    }
+
+    // Create VIP details object with calculated values
+    const vipDetails = {
       level: user.vipLevel || 'none',
       status: user.vipLevel ? 'active' : 'none',
-      dailyTaskLimit: 0,
-      dailyEarnings: 0,
-      monthlyTaskLimit: 0,
+      dailyTaskLimit,
+      dailyEarnings,
+      monthlyTaskLimit,
       monthlyReturns: user.monthlyReturns || 0,
       subscriptionDate: user.subscriptionDate,
       expiryDate: null,
       isActive: !!user.vipLevel
     };
-
-    // Calculate VIP benefits based on level
-    if (user.vipLevel) {
-      switch (user.vipLevel) {
-        case 'VIP1':
-          vipDetails.dailyTaskLimit = 5;
-          vipDetails.dailyEarnings = 30;
-          vipDetails.monthlyTaskLimit = 150;
-          break;
-        case 'VIP2':
-          vipDetails.dailyTaskLimit = 10;
-          vipDetails.dailyEarnings = 100;
-          vipDetails.monthlyTaskLimit = 300;
-          break;
-        case 'VIP3':
-          vipDetails.dailyTaskLimit = 20;
-          vipDetails.dailyEarnings = 370;
-          vipDetails.monthlyTaskLimit = 600;
-          break;
-      }
-    }
 
     // Get VIP purchase history from transactions
     const vipTransactions = await WalletTransaction.find({
