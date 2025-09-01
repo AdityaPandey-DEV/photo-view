@@ -5,7 +5,7 @@
   "installCommand": "npm install",
   "devCommand": "npm run dev",
   "env": {
-    "MONGODB_URI": "mongodb+srv://anpandey042_db_user:vRPrV4Bh3zvQDPuP@ad.ynepvru.mongodb.net/photography-services?retryWrites=true&w=majority",
+    "MONGODB_URI": "mongodb+srv://anpandey042_db_user:p3d4mQ91oBVssrol@ad.ynepvru.mongodb.net/photography-services?retryWrites=true&w=majority",
     "JWT_SECRET": "BmblGpn+w+GgUvMohBIDexy6HK5C0jSV+BF8GfnnjBfwbOd9pH5/eGlgh3CkqAgC",
     "NODE_ENV": "production",
     "RAZORPAY_KEY_ID": "rzp_test_RBDl3GLyIo0UiY",
