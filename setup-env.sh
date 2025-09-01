@@ -5,7 +5,7 @@ echo "🚀 Setting up environment variables for MongoDB Atlas..."
 
 # Create .env.local file
 cat > .env.local << EOF
-in n MONGODB_URI=mongodb+srv://anpandey042_db_user:p3d4mQ91oBVssrol@ad.ynepvru.mongodb.net/photography-services?retryWrites=true&w=majority
+MONGODB_URI=mongodb+srv://anpandey042_db_user:p3d4mQ91oBVssrol@ad.ynepvru.mongodb.net/photography-services?retryWrites=true&w=majority
 JWT_SECRET=your-super-secret-jwt-key-change-in-production
 NODE_ENV=development
 
@@ -27,7 +27,7 @@ echo "2. Change JWT_SECRET to a secure random string"
 echo "3. Run: npm run dev"
 echo ""
 echo "🌐 Your MongoDB Atlas credentials:"
-echo "Username: adityabro925_db_user"
-echo "Password: pfOFqGYte57M8a0l"
+echo "Username: anpandey042_db_user"
+echo "Password: p3d4mQ91oBVssrol"
 echo ""
 echo "📖 Check SETUP.md for complete instructions"
